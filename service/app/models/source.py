@@ -1,0 +1,65 @@
+"""Source model."""
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database import Base
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _uuid() -> str:
+    return str(uuid.uuid4())
+
+
+class Source(Base):
+    __tablename__ = "sources"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    topic_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("topics.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    type: Mapped[str] = mapped_column(
+        Enum("pdf", "docx", "xlsx", "text", "url", "image", name="source_type"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(500), nullable=False)
+    blob_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    topic: Mapped["Topic"] = relationship("Topic", back_populates="sources")  # noqa: F821
+    nodes: Mapped[list["Node"]] = relationship(  # noqa: F821
+        "Node", back_populates="source", cascade="all, delete-orphan"
+    )
+    chunks: Mapped[list["Chunk"]] = relationship(
+        "Chunk", back_populates="source", cascade="all, delete-orphan"
+    )
+    document_blocks: Mapped[list["DocumentBlock"]] = relationship(  # noqa: F821
+        "DocumentBlock", back_populates="source"
+    )
+
+
+class Chunk(Base):
+    __tablename__ = "chunks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    source_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("sources.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    topic_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("topics.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    # Embedding stored as JSON blob (float list) — sqlite-vec integration would use a vector column
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    order: Mapped[int] = mapped_column(nullable=False, default=0)
+
+    source: Mapped["Source"] = relationship("Source", back_populates="chunks")

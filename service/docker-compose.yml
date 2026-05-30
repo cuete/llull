@@ -1,0 +1,53 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # Auth — disabled for local dev
+      AUTH_ENABLED: "false"
+
+      # Database
+      DATABASE_URL: "sqlite+aiosqlite:///./data/llull.db"
+
+      # LLM — use Ollama for local dev (no API key required)
+      LLM_PROVIDER: "${LLM_PROVIDER:-ollama}"
+      LLM_MODEL: "${LLM_MODEL:-llama3}"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+
+      # Storage — local filesystem in dev
+      STORAGE_BACKEND: "local"
+      LOCAL_STORAGE_PATH: "/app/data/uploads"
+
+      # App
+      DEBUG: "true"
+      LOG_LEVEL: "DEBUG"
+      CORS_ORIGINS: '["http://localhost:3000", "http://localhost:8080"]'
+    volumes:
+      - llull_data:/app/data
+    depends_on:
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    # Pull a model on first run:
+    # docker exec llull-ollama-1 ollama pull llama3
+
+volumes:
+  llull_data:
+  ollama_data:
