@@ -81,6 +81,10 @@ async def upload_source(
             tmp.write(content_bytes)
             temp_path = Path(tmp.name)
 
+    # Commit the task record NOW so the background task can safely fetch it
+    # (get_db() commits after yield, but background task runs concurrently)
+    await db.commit()
+
     # Launch background ingestion
     asyncio.create_task(
         _run_ingest_background(
