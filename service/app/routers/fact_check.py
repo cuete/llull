@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings, get_cached_settings
 from app.database import get_db
 from app.models.source import Source
 from app.models.topic import Topic
@@ -51,11 +52,11 @@ Search results:
 {results}
 """
 
-# DuckDuckGo lite search (no API key needed)
-_DDG_URL = "https://html.duckduckgo.com/html/"
-_SEARCH_TIMEOUT = 10.0
-_MAX_RESULT_CHARS = 1200
-_TOP_RESULTS = 3
+# Perplexity search
+_PERPLEXITY_URL = "https://api.perplexity.ai/chat/completions"
+_PERPLEXITY_MODEL = "sonar"
+_SEARCH_TIMEOUT = 20.0
+_MAX_RESULT_CHARS = 2000
 
 
 # ─── Response schemas ────────────────────────────────────────────────────────
@@ -101,49 +102,54 @@ def _extract_json(text: str) -> Any:
     return None
 
 
-async def _web_search(query: str) -> list[dict]:
+async def _perplexity_search(claim: str, api_key: str) -> list[dict]:
     """
-    Search DuckDuckGo HTML endpoint. Returns list of {title, url, snippet}.
-    Falls back to empty list on any error (degraded mode, not fatal).
+    Search via Perplexity sonar model. Returns list of {title, url, snippet}.
+    Falls back to empty list on any error (degraded, not fatal).
     """
+    if not api_key:
+        log.warning("perplexity_api_key_missing")
+        return []
+
     try:
-        async with httpx.AsyncClient(timeout=_SEARCH_TIMEOUT, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=_SEARCH_TIMEOUT) as client:
             resp = await client.post(
-                _DDG_URL,
-                data={"q": query, "b": "", "kl": ""},
-                headers={"User-Agent": "Mozilla/5.0 (llull fact-checker)"},
+                _PERPLEXITY_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": _PERPLEXITY_MODEL,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": f"Verify this claim and cite sources: {claim}",
+                        }
+                    ],
+                },
             )
             resp.raise_for_status()
-            html = resp.text
+            data = resp.json()
 
-        # Extract result snippets with simple regex (DDG HTML is stable enough)
-        results = []
-        # Match result links
-        link_pattern = re.compile(
-            r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
-            re.DOTALL,
-        )
-        snippet_pattern = re.compile(
-            r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>',
-            re.DOTALL,
-        )
-        links = link_pattern.findall(html)
-        snippets = snippet_pattern.findall(html)
+        # Extract answer text and cited URLs from Perplexity response
+        answer = ""
+        choices = data.get("choices", [])
+        if choices:
+            answer = choices[0].get("message", {}).get("content", "")
 
-        for i, (url, title) in enumerate(links[:_TOP_RESULTS]):
-            snippet = snippets[i] if i < len(snippets) else ""
-            # Strip HTML tags
-            clean_title = re.sub(r"<[^>]+>", "", title).strip()
-            clean_snippet = re.sub(r"<[^>]+>", "", snippet).strip()
-            results.append({
-                "url": url,
-                "title": clean_title,
-                "snippet": clean_snippet[:_MAX_RESULT_CHARS],
-            })
-        return results
+        # Perplexity returns citations in data["citations"] (list of URLs)
+        citations = data.get("citations", [])
+        top_url = citations[0] if citations else ""
+
+        return [{
+            "url": top_url,
+            "title": "Perplexity search result",
+            "snippet": answer[:_MAX_RESULT_CHARS],
+        }]
 
     except Exception as e:
-        log.warning("web_search_failed", query=query[:80], error=str(e))
+        log.warning("perplexity_search_failed", query=claim[:80], error=str(e))
         return []
 
 
@@ -164,7 +170,7 @@ async def _extract_claims(text: str, llm: LLMAdapter) -> list[str]:
 async def _evaluate_claim(
     claim: str,
     search_results: list[dict],
-    llm: LLMAdapter,
+    llm: LLMAdapter,  # noqa: ARG001 — kept for potential future use; Perplexity already returns evaluation
 ) -> tuple[str, str]:
     """
     Ask the LLM to evaluate a claim against search results.
@@ -203,6 +209,7 @@ async def fact_check_source(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     llm: LLMAdapter = Depends(get_llm_adapter),
+    settings: Settings = Depends(get_cached_settings),
 ) -> FactCheckResponse:
     """
     Run on-demand web fact-check on a source.
@@ -238,10 +245,10 @@ async def fact_check_source(
     if not claims:
         raise HTTPException(status_code=422, detail="Could not extract verifiable claims from this source")
 
-    # Step 2 + 3: Search & evaluate each claim
+    # Step 2 + 3: Search via Perplexity & evaluate each claim
     claim_results: list[ClaimResult] = []
     for claim in claims:
-        search_results = await _web_search(claim)
+        search_results = await _perplexity_search(claim, settings.perplexity_api_key)
         top_url = search_results[0]["url"] if search_results else ""
         verdict, evidence = await _evaluate_claim(claim, search_results, llm)
         claim_results.append(ClaimResult(

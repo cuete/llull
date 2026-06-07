@@ -41,10 +41,13 @@ class Settings(BaseSettings):
     # Embeddings
     embedding_model: str = "all-mpnet-base-v2"
 
+    # Search / Fact-check
+    perplexity_api_key: str = ""
+
     # App
     debug: bool = False
     log_level: str = "INFO"
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8080"]
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8080", "http://100.103.209.11:3000"]
 
     @field_validator("cors_origins", mode="before")
     @classmethod

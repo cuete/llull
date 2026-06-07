@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FC } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ErrorMessage } from "../../components/ErrorMessage";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
@@ -59,12 +59,13 @@ interface RatingBadgesProps {
   onFactCheckDone: (sourceId: string, updated: Source) => void;
 }
 
+// Which expand panel is open: null | "ai" | "quality" | "claims"
+type ExpandedPanel = null | "ai" | "quality" | "claims";
+
 const RatingBadges: FC<RatingBadgesProps> = ({ source, topicId, onFactCheckDone }) => {
   const queryClient = useQueryClient();
   const [fcLoading, setFcLoading] = useState(false);
-  const [claimsExpanded, setClaimsExpanded] = useState(false);
-  const [tooltip, setTooltip] = useState<{ id: string; text: string } | null>(null);
-  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState<ExpandedPanel>(null);
 
   const claims: FactCheckClaim[] = (() => {
     if (!source.fact_check_result) return [];
@@ -85,6 +86,7 @@ const RatingBadges: FC<RatingBadgesProps> = ({ source, topicId, onFactCheckDone 
       };
       onFactCheckDone(source.id, updatedSource);
       queryClient.invalidateQueries({ queryKey: ["sources", topicId] });
+      setExpanded("claims");
     } catch {
       // silent fail — user can retry
     } finally {
@@ -92,64 +94,70 @@ const RatingBadges: FC<RatingBadgesProps> = ({ source, topicId, onFactCheckDone 
     }
   };
 
-  const showTooltip = (id: string, text: string) => setTooltip({ id, text });
-  const hideTooltip = () => setTooltip(null);
+  const toggle = (panel: ExpandedPanel) =>
+    setExpanded((prev) => (prev === panel ? null : panel));
 
   const hasFc = source.fact_check_score != null;
 
   return (
     <div className={styles.ratingRow} onClick={(e) => e.stopPropagation()}>
-      {/* AI Suspicion badge */}
-      <span
-        className={styles.ratingBadge}
-        style={{ color: source.ai_suspicion != null ? aiSuspicionColor(source.ai_suspicion) : undefined }}
-        onMouseEnter={() => source.ai_suspicion_reason && showTooltip(`ai-${source.id}`, source.ai_suspicion_reason)}
-        onMouseLeave={hideTooltip}
-        title={source.ai_suspicion_reason ?? undefined}
-      >
-        🤖 AI: {source.ai_suspicion != null ? `${source.ai_suspicion}%` : "–"}
-      </span>
-
-      {/* Quality badge */}
-      <span
-        className={styles.ratingBadge}
-        style={{ color: source.quality_score != null ? qualityColor(source.quality_score) : undefined }}
-        onMouseEnter={() => source.quality_reason && showTooltip(`q-${source.id}`, source.quality_reason)}
-        onMouseLeave={hideTooltip}
-        title={source.quality_reason ?? undefined}
-      >
-        ⭐ Quality: {source.quality_score != null ? `${source.quality_score}%` : "–"}
-      </span>
-
-      {/* Fact-check button / result */}
-      {hasFc ? (
+      {/* Badge row */}
+      <div className={styles.badgeRow}>
+        {/* AI Suspicion — tap to expand reason */}
         <button
-          className={`${styles.ratingBadge} ${styles.ratingBadgeBtn}`}
-          onClick={(e) => { e.stopPropagation(); setClaimsExpanded((v) => !v); }}
-          title="Toggle claims"
+          className={`${styles.ratingBadge} ${styles.ratingBadgeBtn} ${expanded === "ai" ? styles.ratingBadgeActive : ""}`}
+          style={{ color: source.ai_suspicion != null ? aiSuspicionColor(source.ai_suspicion) : undefined }}
+          onClick={(e) => { e.stopPropagation(); toggle("ai"); }}
+          disabled={!source.ai_suspicion_reason}
         >
-          ✅ FC: {source.fact_check_score}%
+          🤖 AI: {source.ai_suspicion != null ? `${source.ai_suspicion}%` : "–"}
         </button>
-      ) : (
-        <button
-          className={`${styles.ratingBadge} ${styles.ratingBadgeBtn}`}
-          onClick={handleFactCheck}
-          disabled={fcLoading}
-          title="Run fact-check"
-        >
-          {fcLoading ? "⏳ Checking…" : "🔍 Fact Check"}
-        </button>
-      )}
 
-      {/* Tooltip */}
-      {tooltip && (
-        <div ref={tooltipRef} className={styles.ratingTooltip}>
-          {tooltip.text}
+        {/* Quality — tap to expand reason */}
+        <button
+          className={`${styles.ratingBadge} ${styles.ratingBadgeBtn} ${expanded === "quality" ? styles.ratingBadgeActive : ""}`}
+          style={{ color: source.quality_score != null ? qualityColor(source.quality_score) : undefined }}
+          onClick={(e) => { e.stopPropagation(); toggle("quality"); }}
+          disabled={!source.quality_reason}
+        >
+          ⭐ Quality: {source.quality_score != null ? `${source.quality_score}%` : "–"}
+        </button>
+
+        {/* Fact-check button / result */}
+        {hasFc ? (
+          <button
+            className={`${styles.ratingBadge} ${styles.ratingBadgeBtn} ${expanded === "claims" ? styles.ratingBadgeActive : ""}`}
+            onClick={(e) => { e.stopPropagation(); toggle("claims"); }}
+          >
+            ✅ FC: {source.fact_check_score}%
+          </button>
+        ) : (
+          <button
+            className={`${styles.ratingBadge} ${styles.ratingBadgeBtn}`}
+            onClick={handleFactCheck}
+            disabled={fcLoading}
+          >
+            {fcLoading ? "⏳ Checking…" : "🔍 Fact Check"}
+          </button>
+        )}
+      </div>
+
+      {/* Inline expand block — shared, shows reason or claims */}
+      {expanded === "ai" && source.ai_suspicion_reason && (
+        <div className={styles.expandBlock}>
+          <span className={styles.expandLabel}>🤖 AI Suspicion</span>
+          <p className={styles.expandText}>{source.ai_suspicion_reason}</p>
         </div>
       )}
 
-      {/* Claims list (expanded) */}
-      {claimsExpanded && claims.length > 0 && (
+      {expanded === "quality" && source.quality_reason && (
+        <div className={styles.expandBlock}>
+          <span className={styles.expandLabel}>⭐ Quality</span>
+          <p className={styles.expandText}>{source.quality_reason}</p>
+        </div>
+      )}
+
+      {expanded === "claims" && claims.length > 0 && (
         <div className={styles.claimsList}>
           {claims.map((c, i) => (
             <div key={i} className={styles.claimItem}>

@@ -151,11 +151,16 @@
 
 .ratingRow {
   display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.badgeRow {
+  display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin-top: 0.35rem;
-  align-items: flex-start;
-  position: relative;
+  align-items: center;
 }
 
 .ratingBadge {
@@ -186,28 +191,40 @@
   cursor: not-allowed;
 }
 
-.ratingTooltip {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 50;
-  background: var(--bg-card, #1e1e2e);
+.ratingBadgeActive {
+  background: rgba(255,255,255,0.14) !important;
+  border-color: var(--accent) !important;
+}
+
+.expandBlock {
+  background: rgba(0,0,0,0.15);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  max-width: 280px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  pointer-events: none;
-  margin-top: 4px;
+  padding: 0.45rem 0.65rem;
+}
+
+.expandLabel {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 0.2rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.expandText {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-secondary, #b0b0c8);
+  line-height: 1.5;
 }
 
 /* ── Claims list ── */
 
 .claimsList {
   width: 100%;
-  margin-top: 0.4rem;
+  margin-top: 0;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;

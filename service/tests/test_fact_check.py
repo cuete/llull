@@ -109,7 +109,7 @@ async def test_fact_check_success():
         session.add(source)
         await session.commit()
 
-    with patch("app.routers.fact_check._web_search", return_value=[]):
+    with patch("app.routers.fact_check._perplexity_search", return_value=[]):
         async with AsyncClient(
             transport=ASGITransport(app=application), base_url="http://test"
         ) as c:
@@ -182,7 +182,7 @@ async def test_fact_check_no_extracted_text():
         session.add(source)
         await session.commit()
 
-    with patch("app.routers.fact_check._web_search", return_value=[]):
+    with patch("app.routers.fact_check._perplexity_search", return_value=[]):
         async with AsyncClient(
             transport=ASGITransport(app=application), base_url="http://test"
         ) as c:
@@ -216,7 +216,7 @@ async def test_fact_check_quality_score_updated():
         session.add(source)
         await session.commit()
 
-    with patch("app.routers.fact_check._web_search", return_value=[]):
+    with patch("app.routers.fact_check._perplexity_search", return_value=[]):
         async with AsyncClient(
             transport=ASGITransport(app=application), base_url="http://test"
         ) as c:
