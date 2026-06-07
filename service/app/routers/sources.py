@@ -13,10 +13,12 @@ from app.database import get_db
 from app.models.source import Source
 from app.models.task import Task
 from app.models.topic import Topic
-from app.routers.deps import get_current_user, get_embedding_service
+from app.routers.deps import get_current_user, get_embedding_service, get_llm_adapter
 from app.schemas.source import SourcePatch, SourceResponse, TaskCreatedResponse
+from app.parsers.url import _check_unsupported_url
 from app.services.embeddings import EmbeddingService
 from app.services.ingest import IngestService
+from app.services.llm.base import LLMAdapter
 
 router = APIRouter(prefix="/topics/{topic_id}/sources", tags=["sources"])
 
@@ -54,8 +56,16 @@ async def upload_source(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     embedding_service: EmbeddingService = Depends(get_embedding_service),
+    llm: LLMAdapter = Depends(get_llm_adapter),
 ) -> dict:
     await _get_topic_or_404(db, topic_id, user_id)
+
+    # Reject unsupported URL types (video/audio) before queuing any background work
+    if source_type == "url" and content:
+        try:
+            _check_unsupported_url(content)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     # Create task record
     task = Task(
@@ -95,6 +105,7 @@ async def upload_source(
             temp_path=temp_path,
             task_id=task_id,
             embedding_service=embedding_service,
+            llm=llm,
         )
     )
 
@@ -109,6 +120,7 @@ async def _run_ingest_background(
     temp_path: Path | None,
     task_id: str,
     embedding_service: EmbeddingService,
+    llm: LLMAdapter | None = None,
     session_factory=None,
 ) -> None:
     """Background ingestion task."""
@@ -135,6 +147,7 @@ async def _run_ingest_background(
                 local_storage_path=settings.local_storage_path,
                 azure_connection_string=settings.azure_storage_connection_string,
                 azure_container=settings.azure_storage_container,
+                llm=llm,
             )
 
             if source_type == "url" and content:

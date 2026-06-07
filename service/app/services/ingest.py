@@ -15,6 +15,7 @@ from app.models.task import Task
 from app.parsers import get_parser
 from app.services.embeddings import EmbeddingService
 from app.services.prompt import count_tokens
+from app.services.rating import RatingService
 
 if TYPE_CHECKING:
     pass
@@ -78,6 +79,7 @@ class IngestService:
         local_storage_path: str = "./data/uploads",
         azure_connection_string: str = "",
         azure_container: str = "",
+        llm=None,
     ) -> None:
         self._db = db
         self._embeddings = embedding_service
@@ -85,6 +87,7 @@ class IngestService:
         self._local_storage_path = Path(local_storage_path)
         self._azure_connection_string = azure_connection_string
         self._azure_container = azure_container
+        self._llm = llm
 
     async def ingest_file(
         self,
@@ -153,12 +156,16 @@ class IngestService:
         await self._update_task_progress(task, "uploading", 50)
 
         # 3. Persist Source
+        # Store the original URL for URL-type sources so it can be surfaced in the UI
+        source_url = str(source_input) if source_type == "url" else None
+
         source = Source(
             id=str(uuid.uuid4()),
             topic_id=topic_id,
             type=source_type,
             name=name,
             blob_url=blob_url,
+            source_url=source_url,
             extracted_text=extracted_text,
         )
         self._db.add(source)
@@ -195,7 +202,26 @@ class IngestService:
             log.warning("embedding_generation_failed", source_id=source.id, error=str(e))
             # Continue in degraded mode — source usable without embeddings
 
-        # 6. Mark task done
+        # 6. Rate the source (AI suspicion + quality score)
+        if self._llm is not None:
+            try:
+                rating_svc = RatingService(self._llm)
+                ratings = await rating_svc.rate_source(extracted_text)
+                source.ai_suspicion = ratings.get("ai_suspicion")
+                source.ai_suspicion_reason = ratings.get("ai_suspicion_reason")
+                source.quality_score = ratings.get("quality_score")
+                source.quality_reason = ratings.get("quality_reason")
+                await self._db.flush()
+                log.info(
+                    "rating_complete",
+                    source_id=source.id,
+                    ai_suspicion=source.ai_suspicion,
+                    quality_score=source.quality_score,
+                )
+            except Exception as e:
+                log.warning("rating_skipped", source_id=source.id, error=str(e))
+
+        # 7. Mark task done
         task.status = "done"
         task.progress = 100
         task.result = json.dumps({"source_id": source.id})

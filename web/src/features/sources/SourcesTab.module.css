@@ -1,0 +1,264 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 1.5rem;
+  gap: 1rem;
+  overflow-y: auto;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.toolbarTitle {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.sourceList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sourceCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  transition: border-color 0.15s ease;
+}
+
+.sourceCard:hover {
+  border-color: var(--accent);
+}
+
+.sourceIcon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  width: 2rem;
+  text-align: center;
+}
+
+.sourceInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.sourceName {
+  font-weight: 500;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.25rem;
+}
+
+.sourceMeta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.sourceActions {
+  flex-shrink: 0;
+}
+
+.deleteBtn {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+.deleteBtn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  gap: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.emptyIcon {
+  font-size: 2.5rem;
+}
+
+/* ── Pending / in-flight source cards ── */
+
+.pendingCard {
+  border-color: var(--accent);
+  opacity: 0.85;
+}
+
+.pendingCard:hover {
+  border-color: var(--accent);
+}
+
+.pendingCardFailed {
+  border-color: var(--danger);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.pendingCardFailed:hover {
+  border-color: var(--danger);
+}
+
+.pendingSpinner {
+  animation: pendingPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pendingPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.sourceUrl {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  margin-bottom: 0.25rem;
+  text-decoration: none;
+}
+
+.sourceUrl:hover {
+  text-decoration: underline;
+  color: var(--accent);
+}
+
+/* ── Rating badges ── */
+
+.ratingRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  align-items: flex-start;
+  position: relative;
+}
+
+.ratingBadge {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+.ratingBadgeBtn {
+  cursor: pointer;
+  background: rgba(255,255,255,0.05);
+  transition: background 0.15s;
+}
+
+.ratingBadgeBtn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.12);
+  border-color: var(--accent);
+}
+
+.ratingBadgeBtn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.ratingTooltip {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 50;
+  background: var(--bg-card, #1e1e2e);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  max-width: 280px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  pointer-events: none;
+  margin-top: 4px;
+}
+
+/* ── Claims list ── */
+
+.claimsList {
+  width: 100%;
+  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: rgba(0,0,0,0.15);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+}
+
+.claimItem {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.claimVerdict {
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.claimBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.claimText {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-primary, #e0e0e0);
+  line-height: 1.4;
+}
+
+.claimEvidence {
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+  line-height: 1.4;
+}
+
+.claimLink {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--accent);
+  text-decoration: none;
+  margin-top: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.claimLink:hover {
+  text-decoration: underline;
+}

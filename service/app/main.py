@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_cached_settings
 from app.database import close_db, init_db
-from app.routers import analysis, chat, document, export, graph, health, sources, tasks, topics
+from app.routers import analysis, chat, document, export, fact_check, graph, health, sources, tasks, topics
 
 log = structlog.get_logger()
 
@@ -67,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(document.router)
     app.include_router(export.router)
     app.include_router(tasks.router)
+    app.include_router(fact_check.router)
 
     return app
 

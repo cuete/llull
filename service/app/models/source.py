@@ -30,10 +30,19 @@ class Source(Base):
     )
     name: Mapped[str] = mapped_column(String(500), nullable=False)
     blob_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     extracted_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )
+
+    # Quality ratings (populated by RatingService during ingest)
+    ai_suspicion: Mapped[int | None] = mapped_column(nullable=True)
+    ai_suspicion_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    quality_score: Mapped[int | None] = mapped_column(nullable=True)
+    quality_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fact_check_result: Mapped[str | None] = mapped_column(Text, nullable=True)   # JSON string
+    fact_check_score: Mapped[int | None] = mapped_column(nullable=True)           # 0-100
 
     topic: Mapped["Topic"] = relationship("Topic", back_populates="sources")  # noqa: F821
     nodes: Mapped[list["Node"]] = relationship(  # noqa: F821
