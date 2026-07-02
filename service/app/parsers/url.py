@@ -1,6 +1,7 @@
 """URL parser using httpx + BeautifulSoup."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import httpx
@@ -13,6 +14,30 @@ log = structlog.get_logger()
 # Reasonable timeout for URL fetching
 _FETCH_TIMEOUT = 30.0
 
+# Patterns that identify video/audio URLs not supported for text extraction
+_UNSUPPORTED_URL_PATTERNS: list[re.Pattern] = [
+    re.compile(r"youtube\.com/watch", re.IGNORECASE),
+    re.compile(r"youtu\.be/", re.IGNORECASE),
+    re.compile(r"youtube\.com/shorts", re.IGNORECASE),
+    re.compile(r"vimeo\.com/", re.IGNORECASE),
+    re.compile(r"tiktok\.com/", re.IGNORECASE),
+    re.compile(r"twitter\.com/i/", re.IGNORECASE),
+    re.compile(r"x\.com/i/", re.IGNORECASE),
+    re.compile(r"spotify\.com/", re.IGNORECASE),
+    re.compile(r"soundcloud\.com/", re.IGNORECASE),
+    re.compile(r"\.(?:mp4|mp3|wav|ogg|webm|m4a|aac)(?:\?|$)", re.IGNORECASE),
+]
+
+
+def _check_unsupported_url(url: str) -> None:
+    """Raise ValueError if the URL points to a video or audio source."""
+    for pattern in _UNSUPPORTED_URL_PATTERNS:
+        if pattern.search(url):
+            raise ValueError(
+                "Video and audio sources are not supported yet. "
+                "Please provide a text transcript or article URL instead."
+            )
+
 
 class URLParser(BaseParser):
     """Fetch and extract text from a URL."""
@@ -24,6 +49,10 @@ class URLParser(BaseParser):
             raise ImportError("beautifulsoup4 is required for URL parsing") from e
 
         url = str(source)
+
+        # Reject video/audio URLs before attempting any HTTP fetch
+        _check_unsupported_url(url)
+
         log.info("url_extract_start", url=url)
 
         async with httpx.AsyncClient(

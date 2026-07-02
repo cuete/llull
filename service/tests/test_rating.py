@@ -6,7 +6,50 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.services.rating import RatingService, _extract_json, _fallback_null_result
+from app.services.rating import RatingService, _distributed_sample, _extract_json, _fallback_null_result
+
+
+# ─── _distributed_sample unit tests ─────────────────────────────────────────────
+
+def test_distributed_sample_short_text():
+    """Text shorter than total_chars is returned as-is."""
+    text = "short text here"
+    assert _distributed_sample(text, total_chars=8000) == text
+
+
+def test_distributed_sample_exact_chars():
+    """Text of exactly total_chars is returned as-is."""
+    text = "x" * 8000
+    result = _distributed_sample(text, total_chars=8000)
+    assert result == text
+
+
+def test_distributed_sample_produces_five_parts():
+    """Long text produces 5 samples joined by separators."""
+    text = "A" * 100000
+    result = _distributed_sample(text, total_chars=8000, n_samples=5)
+    parts = result.split("\n\n---\n\n")
+    assert len(parts) == 5
+
+
+def test_distributed_sample_covers_start_and_end():
+    """First sample starts near position 0; last sample starts near the end."""
+    # Build a text where each character encodes its position region
+    # Region 0: 'A' * 20000, Region 4: 'E' * 20000
+    text = "A" * 20000 + "B" * 20000 + "C" * 20000 + "D" * 20000 + "E" * 20000
+    result = _distributed_sample(text, total_chars=8000, n_samples=5)
+    parts = result.split("\n\n---\n\n")
+    assert parts[0][0] == "A"   # first sample from the start
+    assert parts[-1][0] == "E"  # last sample from the end
+
+
+def test_distributed_sample_total_chars_respected():
+    """Total returned chars (excluding separators) ≤ total_chars."""
+    text = "Z" * 100000
+    result = _distributed_sample(text, total_chars=8000, n_samples=5)
+    # Strip separators and count actual content characters
+    content_chars = result.replace("\n\n---\n\n", "")
+    assert len(content_chars) <= 8000
 
 
 # ─── Unit tests for _extract_json ────────────────────────────────────────────

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     llm_provider: Literal["openai", "anthropic", "ollama"] = "anthropic"
     llm_model: str = "claude-sonnet-4-5"
     llm_api_key: str = ""
+    llm_base_url: str = ""
     ollama_base_url: str = "http://localhost:11434"
     azure_openai_endpoint: str = ""
     azure_openai_api_version: str = "2024-02-01"

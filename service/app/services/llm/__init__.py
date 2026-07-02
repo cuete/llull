@@ -14,6 +14,7 @@ def create_llm_adapter(
     ollama_base_url: str = "http://localhost:11434",
     azure_endpoint: str | None = None,
     azure_api_version: str = "2024-02-01",
+    base_url: str | None = None,
 ) -> LLMAdapter:
     """Factory function to create the appropriate LLM adapter."""
     match provider.lower():
@@ -23,6 +24,7 @@ def create_llm_adapter(
                 model=model,
                 azure_endpoint=azure_endpoint or None,
                 azure_api_version=azure_api_version,
+                base_url=base_url or None,
             )
         case "anthropic":
             return AnthropicAdapter(api_key=api_key, model=model)

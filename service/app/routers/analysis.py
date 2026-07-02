@@ -26,15 +26,27 @@ router = APIRouter(prefix="/topics/{topic_id}", tags=["analysis"])
 async def analyze_l0(
     topic_id: str,
     source_id: str | None = None,
+    force: bool = False,
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     llm: LLMAdapter = Depends(get_llm_adapter),
 ) -> StreamingResponse:
     """
     Level-0 analysis: extract knowledge graph from sources.
-    Streams SSE events.
+    Streams SSE events. Pass ?force=true to re-analyze existing topics.
     """
     await _get_topic_or_404(db, topic_id, user_id)
+
+    # Idempotency: skip LLM if nodes already exist (unless forced)
+    if not force:
+        existing = await db.execute(
+            select(Node).where(Node.topic_id == topic_id).limit(1)
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Topic already analyzed. View results at /graph, or pass ?force=true to re-analyze.",
+            )
 
     # Get sources to analyze
     if source_id:
@@ -101,7 +113,7 @@ async def _stream_analysis(
         for source in sources:
             async for event_type, data in svc.analyze_l0(topic_id, source):
                 yield f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
-        await db.commit()
+            await db.commit()  # commit per-source so client disconnect doesn't lose work
     except Exception as e:
         log.error("analysis_stream_error", error=str(e))
         await db.rollback()

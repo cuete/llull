@@ -105,3 +105,38 @@ async def test_delete_source(client: AsyncClient, db_session: AsyncSession, samp
 async def test_delete_source_not_found(client: AsyncClient, sample_topic: Topic):
     response = await client.delete(f"/topics/{sample_topic.id}/sources/nonexistent")
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://youtu.be/dQw4w9WgXcQ",
+        "https://www.youtube.com/shorts/abc123",
+        "https://vimeo.com/123456789",
+        "https://www.tiktok.com/@user/video/123",
+        "https://twitter.com/i/status/123",
+        "https://x.com/i/status/123",
+        "https://open.spotify.com/track/abc",
+        "https://soundcloud.com/artist/track",
+        "https://example.com/video.mp4",
+        "https://example.com/audio.mp3",
+        "https://example.com/clip.webm",
+    ],
+)
+async def test_upload_url_source_rejects_video_audio(
+    client: AsyncClient, sample_topic: Topic, url: str
+):
+    """POST with a video/audio URL must return 422 before any background task is created."""
+    response = await client.post(
+        f"/topics/{sample_topic.id}/sources",
+        data={
+            "source_type": "url",
+            "name": "Unsupported",
+            "content": url,
+        },
+    )
+    assert response.status_code == 422, f"Expected 422 for {url}, got {response.status_code}"
+    detail = response.json()["detail"]
+    assert "not supported" in detail.lower(), f"Unexpected detail: {detail}"

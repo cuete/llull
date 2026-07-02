@@ -1,6 +1,8 @@
 """OpenAI / Azure OpenAI LLM adapter."""
 from __future__ import annotations
 
+import asyncio
+import json
 from collections.abc import AsyncIterator
 
 import structlog
@@ -9,6 +11,20 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from app.services.llm.base import LLMAdapter
 
 log = structlog.get_logger()
+
+
+def _sync_openrouter_call(base_url: str, api_key: str, model: str, messages: list, max_tokens: int) -> str:
+    """Synchronous OpenRouter call — runs in thread executor to avoid anyio DNS issues on Windows."""
+    import httpx
+    url = base_url.rstrip("/") + "/chat/completions"
+    with httpx.Client(timeout=60.0) as client:
+        resp = client.post(
+            url,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            content=json.dumps({"model": model, "messages": messages, "max_tokens": max_tokens}),
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"] or ""
 
 
 class OpenAIAdapter(LLMAdapter):
@@ -20,11 +36,13 @@ class OpenAIAdapter(LLMAdapter):
         model: str = "gpt-4o",
         azure_endpoint: str | None = None,
         azure_api_version: str = "2024-02-01",
+        base_url: str | None = None,
     ) -> None:
         self._model = model
         self._api_key = api_key
         self._azure_endpoint = azure_endpoint
         self._azure_api_version = azure_api_version
+        self._base_url = base_url
         self._client: object | None = None
 
     def _get_client(self) -> object:
@@ -59,13 +77,31 @@ class OpenAIAdapter(LLMAdapter):
         stream: bool = False,
         max_tokens: int = 4096,
     ) -> AsyncIterator[str]:
-        client = self._get_client()
         log.info("llm_complete", provider="openai", model=self._model, stream=stream)
 
+        if self._base_url:
+            return self._openrouter_complete(messages, max_tokens)
+
+        client = self._get_client()
         if stream:
             return self._stream_complete(client, messages, max_tokens)
         else:
             return self._batch_complete(client, messages, max_tokens)
+
+    async def _openrouter_complete(
+        self, messages: list[dict], max_tokens: int
+    ) -> AsyncIterator[str]:
+        loop = asyncio.get_event_loop()
+        text = await loop.run_in_executor(
+            None,
+            _sync_openrouter_call,
+            self._base_url,
+            self._api_key,
+            self._model,
+            messages,
+            max_tokens,
+        )
+        yield text
 
     async def _stream_complete(
         self, client: object, messages: list[dict], max_tokens: int

@@ -164,6 +164,19 @@ export async function patchDocumentBlock(
   if (!res.ok) throw new ApiError(res.status, `Patch block failed: ${res.status}`);
 }
 
+export async function addDocumentBlock(
+  topicId: string,
+  content_md: string,
+  source = "chat",
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/topics/${topicId}/document/blocks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content_md, source }),
+  });
+  if (!res.ok) throw new ApiError(res.status, `Add block failed: ${res.status}`);
+}
+
 // ─── Conversation ─────────────────────────────────────────────────────────────
 
 export async function getChatHistory(topicId: string): Promise<ConversationMessage[]> {

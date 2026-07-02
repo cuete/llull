@@ -82,6 +82,7 @@ def get_llm_adapter(settings: Settings = Depends(get_cached_settings)) -> LLMAda
             ollama_base_url=settings.ollama_base_url,
             azure_endpoint=settings.azure_openai_endpoint or None,
             azure_api_version=settings.azure_openai_api_version,
+            base_url=settings.llm_base_url or None,
         )
     return _llm_adapter
 

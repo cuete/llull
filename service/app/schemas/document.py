@@ -20,6 +20,12 @@ class DocumentBlockUpdate(BaseModel):
     content_md: str
 
 
+class DocumentBlockCreate(BaseModel):
+    content_md: str
+    source: str = "chat"  # e.g. "chat", "manual"
+    order: int | None = None  # appended at end if omitted
+
+
 class DocumentResponse(BaseModel):
     id: str
     topic_id: str
