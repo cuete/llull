@@ -4,8 +4,9 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import get_cached_settings
 from app.database import close_db, init_db
@@ -56,6 +57,16 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def demo_mode_guard(request: Request, call_next):
+        """Reject all mutating requests when DEMO_MODE is enabled."""
+        if settings.demo_mode and request.method not in ("GET", "HEAD", "OPTIONS"):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Demo mode: this instance is read-only. Modifications are disabled."},
+            )
+        return await call_next(request)
 
     # Routers
     app.include_router(health.router)

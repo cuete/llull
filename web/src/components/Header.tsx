@@ -1,6 +1,7 @@
 import type { FC } from "react";
 import { Link } from "react-router-dom";
 import { useTheme } from "../hooks/useTheme";
+import { DEMO_MODE } from "../lib/demoModeGuard";
 import styles from "./Header.module.css";
 
 export const Header: FC = () => {
@@ -12,6 +13,11 @@ export const Header: FC = () => {
         <span className={styles.logoIcon}>⚡</span>
         Llull
       </Link>
+      {DEMO_MODE && (
+        <span className={styles.demoBadge} title="This instance is read-only — no changes are saved">
+          🔒 Demo — read only
+        </span>
+      )}
       <div className={styles.actions}>
         <button
           className={styles.themeBtn}

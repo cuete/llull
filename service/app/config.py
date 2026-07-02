@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8080", "http://100.103.209.11:3000"]
 
+    # Demo mode: when true, all non-read-only requests are rejected (see main.py middleware)
+    demo_mode: bool = False
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, v: str | list[str]) -> list[str]:

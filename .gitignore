@@ -10,8 +10,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+service/lib/
+service/lib64/
 parts/
 sdist/
 var/
