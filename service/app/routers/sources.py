@@ -23,9 +23,9 @@ from app.services.llm.base import LLMAdapter
 router = APIRouter(prefix="/topics/{topic_id}/sources", tags=["sources"])
 
 
-async def _get_topic_or_404(db: AsyncSession, topic_id: str, user_id: str) -> Topic:
+async def _get_topic_or_404(db: AsyncSession, topic_id: str) -> Topic:
     result = await db.execute(
-        select(Topic).where(Topic.id == topic_id, Topic.user_id == user_id)
+        select(Topic).where(Topic.id == topic_id)
     )
     topic = result.scalar_one_or_none()
     if topic is None:
@@ -39,7 +39,7 @@ async def list_sources(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Source]:
-    await _get_topic_or_404(db, topic_id, user_id)
+    await _get_topic_or_404(db, topic_id)
     result = await db.execute(
         select(Source).where(Source.topic_id == topic_id).order_by(Source.created_at)
     )
@@ -58,7 +58,7 @@ async def upload_source(
     embedding_service: EmbeddingService = Depends(get_embedding_service),
     llm: LLMAdapter = Depends(get_llm_adapter),
 ) -> dict:
-    await _get_topic_or_404(db, topic_id, user_id)
+    await _get_topic_or_404(db, topic_id)
 
     # Reject unsupported URL types (video/audio) before queuing any background work
     if source_type == "url" and content:
@@ -188,7 +188,7 @@ async def update_source(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Source:
-    await _get_topic_or_404(db, topic_id, user_id)
+    await _get_topic_or_404(db, topic_id)
     source = await _get_source_or_404(db, source_id, topic_id)
 
     if body.name is not None:
@@ -206,7 +206,7 @@ async def delete_source(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    await _get_topic_or_404(db, topic_id, user_id)
+    await _get_topic_or_404(db, topic_id)
     source = await _get_source_or_404(db, source_id, topic_id)
     await db.delete(source)
     await db.flush()

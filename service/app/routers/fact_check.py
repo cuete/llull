@@ -222,7 +222,7 @@ async def fact_check_source(
     """
     # Verify topic ownership
     topic_result = await db.execute(
-        select(Topic).where(Topic.id == topic_id, Topic.user_id == user_id)
+        select(Topic).where(Topic.id == topic_id)
     )
     if topic_result.scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail="Topic not found")

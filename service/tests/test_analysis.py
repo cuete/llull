@@ -1,4 +1,4 @@
-"""Tests for analysis endpoints."""
+"""Tests for analysis endpoints and service utilities."""
 from __future__ import annotations
 
 import uuid
@@ -11,6 +11,125 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.source import Source
 from app.models.topic import Topic
 from app.routers.deps import TEST_USER_ID
+from app.services.analysis import merge_graphs, split_into_sections
+
+
+# ─── split_into_sections unit tests ──────────────────────────────────────────
+
+def test_split_markdown_headers():
+    """Splits on markdown headers."""
+    text = (
+        "# Introduction\nThis is the intro.\n\n"
+        "## Background\nSome background text.\n\n"
+        "### Details\nDetailed information here."
+    )
+    sections = split_into_sections(text)
+    assert len(sections) == 3
+    assert "Introduction" in sections[0]
+    assert "Background" in sections[1]
+    assert "Details" in sections[2]
+
+
+def test_split_capitulo_pattern():
+    """Splits on Capítulo N pattern."""
+    text = (
+        "Capítulo I\nPrimera parte del texto.\n\n"
+        "Capítulo II\nSegunda parte del texto.\n\n"
+        "Capítulo III\nTercera parte."
+    )
+    sections = split_into_sections(text)
+    assert len(sections) == 3
+    assert "Primera" in sections[0]
+    assert "Segunda" in sections[1]
+    assert "Tercera" in sections[2]
+
+
+def test_split_no_boundaries():
+    """Returns [whole_text] when no boundaries found."""
+    text = "This is plain text with no headers or chapter markers."
+    sections = split_into_sections(text)
+    assert len(sections) == 1
+    assert sections[0] == text
+
+
+def test_split_oversized_section():
+    """Section > max_section_chars is sub-split at paragraph boundaries."""
+    # Build a text with one implicit section that exceeds 500 chars
+    para = "A" * 200
+    text = f"{para}\n\n{para}\n\n{para}\n\n{para}"
+    sections = split_into_sections(text, max_section_chars=500)
+    # Total chars = 800 + separators; must produce >1 section
+    assert len(sections) > 1
+    for s in sections:
+        assert len(s) <= 500
+
+
+def test_split_returns_nonempty():
+    """No empty sections returned."""
+    text = "# H1\n\n# H2\n\n# H3\nContent here."
+    sections = split_into_sections(text)
+    assert all(s.strip() for s in sections)
+
+
+# ─── merge_graphs unit tests ─────────────────────────────────────────────────
+
+def test_merge_deduplicates_nodes():
+    """Duplicate node labels produce one node in output."""
+    g1 = {
+        "nodes": [{"label": "Climate Change", "description": "Global warming."}],
+        "edges": [],
+    }
+    g2 = {
+        "nodes": [
+            {"label": "Climate Change", "description": "Synonym."},
+            {"label": "Biodiversity", "description": "Species variety."},
+        ],
+        "edges": [],
+    }
+    merged = merge_graphs([g1, g2])
+    labels = [n["label"] for n in merged["nodes"]]
+    assert labels.count("Climate Change") == 1
+    assert "Biodiversity" in labels
+
+
+def test_merge_averages_duplicate_edges():
+    """Duplicate (from, to, type) edges are averaged."""
+    g1 = {
+        "nodes": [
+            {"label": "A", "description": "Node A"},
+            {"label": "B", "description": "Node B"},
+        ],
+        "edges": [{"from_label": "A", "to_label": "B", "type": "causal", "weight": 0.8, "confidence": 0.9}],
+    }
+    g2 = {
+        "nodes": [
+            {"label": "A", "description": "Node A"},
+            {"label": "B", "description": "Node B"},
+        ],
+        "edges": [{"from_label": "A", "to_label": "B", "type": "causal", "weight": 0.4, "confidence": 0.6}],
+    }
+    merged = merge_graphs([g1, g2])
+    assert len(merged["edges"]) == 1
+    edge = merged["edges"][0]
+    assert abs(edge["weight"] - 0.6) < 0.001
+    assert abs(edge["confidence"] - 0.75) < 0.001
+
+
+def test_merge_empty_graphs():
+    """Merging empty graphs returns empty nodes and edges."""
+    merged = merge_graphs([{"nodes": [], "edges": []}, {"nodes": [], "edges": []}])
+    assert merged["nodes"] == []
+    assert merged["edges"] == []
+
+
+def test_merge_no_self_loops():
+    """Edges where from == to are not created."""
+    g = {
+        "nodes": [{"label": "X", "description": "desc"}],
+        "edges": [{"from_label": "X", "to_label": "X", "type": "relational", "weight": 0.5, "confidence": 0.5}],
+    }
+    merged = merge_graphs([g])
+    assert merged["edges"] == []
 
 
 @pytest.fixture

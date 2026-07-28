@@ -20,7 +20,7 @@ async def get_graph(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GraphResponse:
-    await _get_topic_or_404(db, topic_id, user_id)
+    await _get_topic_or_404(db, topic_id)
 
     nodes_result = await db.execute(
         select(Node).where(Node.topic_id == topic_id).order_by(Node.created_at)
@@ -50,7 +50,7 @@ async def update_edge_weight(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Edge:
-    await _get_topic_or_404(db, topic_id, user_id)
+    await _get_topic_or_404(db, topic_id)
 
     result = await db.execute(select(Edge).where(Edge.id == edge_id))
     edge = result.scalar_one_or_none()
@@ -70,9 +70,9 @@ async def update_edge_weight(
     return edge
 
 
-async def _get_topic_or_404(db: AsyncSession, topic_id: str, user_id: str) -> Topic:
+async def _get_topic_or_404(db: AsyncSession, topic_id: str) -> Topic:
     result = await db.execute(
-        select(Topic).where(Topic.id == topic_id, Topic.user_id == user_id)
+        select(Topic).where(Topic.id == topic_id)
     )
     topic = result.scalar_one_or_none()
     if topic is None:

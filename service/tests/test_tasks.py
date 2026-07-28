@@ -42,10 +42,10 @@ async def test_get_task(
 
 
 @pytest.mark.asyncio
-async def test_get_task_wrong_user(
+async def test_get_task_created_by_another_user_is_visible(
     client: AsyncClient, db_session: AsyncSession
 ):
-    """Task belonging to another user returns 404."""
+    """No per-user data scoping: any authenticated user can see any task."""
     task = Task(
         id=str(uuid.uuid4()),
         user_id="other-user",
@@ -57,7 +57,7 @@ async def test_get_task_wrong_user(
     await db_session.commit()
 
     response = await client.get(f"/tasks/{task.id}")
-    assert response.status_code == 404
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio

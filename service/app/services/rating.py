@@ -44,8 +44,28 @@ Document text:
 
 # Minimum word count to attempt rating
 MIN_WORDS = 300
-# Characters sent to LLM (avoid enormous prompts)
+# Total characters sent to LLM across all samples
 MAX_SAMPLE_CHARS = 8000
+# Number of evenly-distributed samples
+N_SAMPLES = 5
+
+
+def _distributed_sample(text: str, total_chars: int = MAX_SAMPLE_CHARS, n_samples: int = N_SAMPLES) -> str:
+    """
+    Take N evenly-distributed samples across the full text.
+    Ensures the rating covers beginning, middle, and end of document.
+    """
+    if len(text) <= total_chars:
+        return text
+
+    sample_size = total_chars // n_samples
+    step = len(text) // n_samples
+    samples = []
+    for i in range(n_samples):
+        start = i * step
+        samples.append(text[start: start + sample_size])
+
+    return "\n\n---\n\n".join(samples)
 
 
 def _extract_json(text: str) -> dict | None:
@@ -97,7 +117,9 @@ class RatingService:
                 "quality_reason": reason,
             }
 
-        sample = text[:MAX_SAMPLE_CHARS]
+        # Sample evenly from across the full document so beginning, middle,
+        # and end are all represented in the rating
+        sample = _distributed_sample(text)
         messages = [{"role": "user", "content": RATING_PROMPT + sample}]
 
         try:

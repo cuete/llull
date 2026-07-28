@@ -4,14 +4,17 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import get_cached_settings
 from app.database import close_db, init_db
 from app.routers import analysis, chat, document, export, fact_check, graph, health, sources, tasks, topics
 
 log = structlog.get_logger()
+
+_MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 @asynccontextmanager
@@ -56,6 +59,17 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Read-only mode: block writes when enabled, leave GET/HEAD/OPTIONS (and
+    # CORS preflight) untouched so exploring a topic keeps working.
+    @app.middleware("http")
+    async def read_only_guard(request: Request, call_next):
+        if get_cached_settings().read_only and request.method in _MUTATING_METHODS:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Server is in read-only mode. Create/update actions are disabled."},
+            )
+        return await call_next(request)
 
     # Routers
     app.include_router(health.router)

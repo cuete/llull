@@ -20,6 +20,12 @@ security = HTTPBearer(auto_error=False)
 # Test user for AUTH_ENABLED=false
 TEST_USER_ID = "test-user-local"
 
+# Fixed tenant GUID Microsoft issues v2.0 tokens under for personal (MSA) accounts.
+# The JWKS discovery endpoint accepts the "consumers" alias, but the `iss` claim in
+# actual tokens always uses this resolved GUID — so issuer validation must check
+# against it rather than the alias in settings.aad_tenant_id.
+_MSA_CONSUMERS_TENANT_ID = "9188040d-6c67-4c5b-b112-36a304b66dad"
+
 
 async def get_current_user(
     request: Request,
@@ -43,7 +49,7 @@ async def get_current_user(
 
 
 async def _validate_aad_token(token: str, settings: Settings) -> str:
-    """Validate Azure AD JWT token and return user OID."""
+    """Validate a Microsoft identity platform JWT (MSA personal account) and return the user's oid."""
     try:
         import jwt
         from jwt import PyJWKClient
@@ -59,13 +65,16 @@ async def _validate_aad_token(token: str, settings: Settings) -> str:
             signing_key.key,
             algorithms=["RS256"],
             audience=settings.aad_client_id,
-            options={"verify_exp": True},
+            issuer=f"https://login.microsoftonline.com/{_MSA_CONSUMERS_TENANT_ID}/v2.0",
+            options={"verify_exp": True, "verify_iss": True},
         )
         user_id = payload.get("oid") or payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="Token missing user identifier")
         return user_id
 
+    except HTTPException:
+        raise
     except Exception as e:
         log.warning("token_validation_failed", error=str(e))
         raise HTTPException(status_code=401, detail="Invalid token") from e
@@ -82,6 +91,7 @@ def get_llm_adapter(settings: Settings = Depends(get_cached_settings)) -> LLMAda
             ollama_base_url=settings.ollama_base_url,
             azure_endpoint=settings.azure_openai_endpoint or None,
             azure_api_version=settings.azure_openai_api_version,
+            base_url=settings.llm_base_url or None,
         )
     return _llm_adapter
 

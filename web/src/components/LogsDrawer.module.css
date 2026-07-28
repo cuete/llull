@@ -1,0 +1,136 @@
+/* ─── Floating Action Button ─────────────────────────────────────────────── */
+
+.fab {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 900;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 1.25rem;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+
+  transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+.fab:hover {
+  background: var(--bg-hover);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  transform: scale(1.05);
+}
+
+.fab:active {
+  transform: scale(0.96);
+}
+
+/* ─── Error Badge ────────────────────────────────────────────────────────── */
+
+.errorBadge {
+  position: absolute;
+  top: -0.25rem;
+  right: -0.25rem;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.2rem;
+  border-radius: 999px;
+
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* ─── Drawer ─────────────────────────────────────────────────────────────── */
+
+.drawer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 800;
+
+  height: 50vh;
+  min-height: 240px;
+  max-height: 70vh;
+
+  display: flex;
+  flex-direction: column;
+
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
+
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ─── Drawer Header ──────────────────────────────────────────────────────── */
+
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.drawerTitle {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.closeBtn {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.closeBtn:hover {
+  background: var(--bg-input);
+  color: var(--text);
+}
+
+/* ─── Drawer Body ────────────────────────────────────────────────────────── */
+
+.drawerBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}

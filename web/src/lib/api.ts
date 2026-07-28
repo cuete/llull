@@ -4,6 +4,7 @@ import {
   DocumentSchema,
   FactCheckResponseSchema,
   GraphResponseSchema,
+  HealthSchema,
   SourceListSchema,
   SourceSchema,
   TaskSchema,
@@ -13,10 +14,12 @@ import {
   type Document,
   type FactCheckResponse,
   type GraphResponse,
+  type Health,
   type Source,
   type Task,
   type Topic,
 } from "./types";
+import { getIdToken } from "./msal";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -30,13 +33,19 @@ class ApiError extends Error {
   }
 }
 
+/** Authorization header for the signed-in Microsoft account, if any. Empty when auth isn't configured. */
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getIdToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function apiFetch<T>(
   path: string,
   schema: z.ZodType<T>,
   init?: RequestInit,
 ): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: { "Content-Type": "application/json", ...(await authHeaders()), ...init?.headers },
     ...init,
   });
 
@@ -47,6 +56,12 @@ async function apiFetch<T>(
 
   const json: unknown = await res.json();
   return schema.parse(json);
+}
+
+// ─── Health ──────────────────────────────────────────────────────────────────
+
+export async function getHealth(): Promise<Health> {
+  return apiFetch("/health", HealthSchema);
 }
 
 // ─── Topics ──────────────────────────────────────────────────────────────────
@@ -67,7 +82,7 @@ export async function createTopic(title: string): Promise<Topic> {
 }
 
 export async function deleteTopic(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/topics/${id}`, { method: "DELETE" });
+  const res = await fetch(`${API_BASE}/topics/${id}`, { method: "DELETE", headers: await authHeaders() });
   if (!res.ok) throw new ApiError(res.status, `Delete topic failed: ${res.status}`);
 }
 
@@ -87,6 +102,7 @@ export async function listSources(topicId: string): Promise<Source[]> {
 export async function deleteSource(topicId: string, sourceId: string): Promise<void> {
   const res = await fetch(`${API_BASE}/topics/${topicId}/sources/${sourceId}`, {
     method: "DELETE",
+    headers: await authHeaders(),
   });
   if (!res.ok) throw new ApiError(res.status, `Delete source failed: ${res.status}`);
 }
@@ -96,7 +112,7 @@ export async function addSourceUrl(topicId: string, name: string, url: string): 
   form.append("source_type", "url");
   form.append("name", name);
   form.append("content", url);
-  const res = await fetch(`${API_BASE}/topics/${topicId}/sources`, { method: "POST", body: form });
+  const res = await fetch(`${API_BASE}/topics/${topicId}/sources`, { method: "POST", body: form, headers: await authHeaders() });
   if (!res.ok) throw new ApiError(res.status, `Add source failed: ${res.status}`);
   return res.json() as Promise<{ task_id: string }>;
 }
@@ -106,7 +122,7 @@ export async function addSourceText(topicId: string, name: string, text: string)
   form.append("source_type", "text");
   form.append("name", name);
   form.append("content", text);
-  const res = await fetch(`${API_BASE}/topics/${topicId}/sources`, { method: "POST", body: form });
+  const res = await fetch(`${API_BASE}/topics/${topicId}/sources`, { method: "POST", body: form, headers: await authHeaders() });
   if (!res.ok) throw new ApiError(res.status, `Add source failed: ${res.status}`);
   return res.json() as Promise<{ task_id: string }>;
 }
@@ -116,7 +132,7 @@ export async function addSourceFile(topicId: string, file: File): Promise<{ task
   form.append("source_type", "file");
   form.append("name", file.name);
   form.append("file", file);
-  const res = await fetch(`${API_BASE}/topics/${topicId}/sources`, { method: "POST", body: form });
+  const res = await fetch(`${API_BASE}/topics/${topicId}/sources`, { method: "POST", body: form, headers: await authHeaders() });
   if (!res.ok) throw new ApiError(res.status, `Add source failed: ${res.status}`);
   return res.json() as Promise<{ task_id: string }>;
 }
@@ -158,10 +174,23 @@ export async function patchDocumentBlock(
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/topics/${topicId}/document/blocks/${blockId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     body: JSON.stringify({ content_md }),
   });
   if (!res.ok) throw new ApiError(res.status, `Patch block failed: ${res.status}`);
+}
+
+export async function addDocumentBlock(
+  topicId: string,
+  content_md: string,
+  source = "chat",
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/topics/${topicId}/document/blocks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+    body: JSON.stringify({ content_md, source }),
+  });
+  if (!res.ok) throw new ApiError(res.status, `Add block failed: ${res.status}`);
 }
 
 // ─── Conversation ─────────────────────────────────────────────────────────────
@@ -195,7 +224,7 @@ export async function analyzeTopicStream(
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/topics/${topicId}/analyze`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
   });
 
   if (!res.ok || !res.body) {
@@ -256,7 +285,7 @@ export async function zoomNodeStream(
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/topics/${topicId}/zoom/${nodeId}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     body: JSON.stringify({}),
   });
 

@@ -21,9 +21,7 @@ async def list_topics(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Topic]:
-    result = await db.execute(
-        select(Topic).where(Topic.user_id == user_id).order_by(Topic.updated_at.desc())
-    )
+    result = await db.execute(select(Topic).order_by(Topic.updated_at.desc()))
     return list(result.scalars().all())
 
 
@@ -50,7 +48,7 @@ async def get_topic(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Topic:
-    topic = await _get_topic_or_404(db, topic_id, user_id)
+    topic = await _get_topic_or_404(db, topic_id)
     return topic
 
 
@@ -61,7 +59,7 @@ async def update_topic(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Topic:
-    topic = await _get_topic_or_404(db, topic_id, user_id)
+    topic = await _get_topic_or_404(db, topic_id)
 
     if body.title is not None:
         topic.title = body.title
@@ -80,14 +78,14 @@ async def delete_topic(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    topic = await _get_topic_or_404(db, topic_id, user_id)
+    topic = await _get_topic_or_404(db, topic_id)
     await db.delete(topic)
     await db.flush()
 
 
-async def _get_topic_or_404(db: AsyncSession, topic_id: str, user_id: str) -> Topic:
+async def _get_topic_or_404(db: AsyncSession, topic_id: str) -> Topic:
     result = await db.execute(
-        select(Topic).where(Topic.id == topic_id, Topic.user_id == user_id)
+        select(Topic).where(Topic.id == topic_id)
     )
     topic = result.scalar_one_or_none()
     if topic is None:

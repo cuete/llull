@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     llm_provider: Literal["openai", "anthropic", "ollama"] = "anthropic"
     llm_model: str = "claude-sonnet-4-5"
     llm_api_key: str = ""
+    llm_base_url: str = ""
     ollama_base_url: str = "http://localhost:11434"
     azure_openai_endpoint: str = ""
     azure_openai_api_version: str = "2024-02-01"
@@ -47,6 +48,7 @@ class Settings(BaseSettings):
     # App
     debug: bool = False
     log_level: str = "INFO"
+    read_only: bool = False
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8080", "http://100.103.209.11:3000"]
 
     @field_validator("cors_origins", mode="before")

@@ -24,7 +24,9 @@ When analyzing documents:
 - Distinguish between what is stated vs. implied
 - Flag uncertainty explicitly
 
-Always respond in valid JSON when asked for structured output."""
+When chatting with the user, respond in clean, readable markdown. Use bullet points, headings, and emphasis as appropriate. Do NOT output JSON, mermaid diagrams, or code blocks unless the user explicitly asks for them. Never generate mermaid charts spontaneously.
+
+When responding to the user, match the language of the document sources unless the user writes in a different language — in that case, respond in the user's language."""
 
 # Token budget constants
 MAX_CONTEXT_TOKENS = 100_000

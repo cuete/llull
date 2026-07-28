@@ -31,7 +31,7 @@ async def export_document(
             detail=f"Unsupported format. Allowed: {', '.join(ALLOWED_FORMATS)}",
         )
 
-    await _get_topic_or_404(db, topic_id, user_id)
+    await _get_topic_or_404(db, topic_id)
 
     result = await db.execute(
         select(Document)
@@ -55,9 +55,9 @@ async def export_document(
     )
 
 
-async def _get_topic_or_404(db: AsyncSession, topic_id: str, user_id: str) -> Topic:
+async def _get_topic_or_404(db: AsyncSession, topic_id: str) -> Topic:
     result = await db.execute(
-        select(Topic).where(Topic.id == topic_id, Topic.user_id == user_id)
+        select(Topic).where(Topic.id == topic_id)
     )
     topic = result.scalar_one_or_none()
     if topic is None:

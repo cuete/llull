@@ -1,5 +1,15 @@
 import { z } from "zod";
 
+// ─── Health ──────────────────────────────────────────────────────────────────
+
+export const HealthSchema = z.object({
+  status: z.string(),
+  read_only: z.boolean(),
+  auth_enabled: z.boolean(),
+});
+
+export type Health = z.infer<typeof HealthSchema>;
+
 // ─── Topic ───────────────────────────────────────────────────────────────────
 
 export const TopicSchema = z.object({

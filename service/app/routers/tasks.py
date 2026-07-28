@@ -26,7 +26,7 @@ async def get_task(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Task:
-    task = await _get_task_or_404(db, task_id, user_id)
+    task = await _get_task_or_404(db, task_id)
     return task
 
 
@@ -37,7 +37,7 @@ async def stream_task_progress(
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """SSE stream for task progress polling."""
-    task = await _get_task_or_404(db, task_id, user_id)
+    task = await _get_task_or_404(db, task_id)
 
     # Capture factory from DI context
     from app.database import get_session_factory as _get_sf
@@ -66,7 +66,7 @@ async def _poll_task(task_id: str, user_id: str, factory):
     for _ in range(max_polls):
         async with factory() as db:
             result = await db.execute(
-                select(Task).where(Task.id == task_id, Task.user_id == user_id)
+                select(Task).where(Task.id == task_id)
             )
             task = result.scalar_one_or_none()
             if task is None:
@@ -99,9 +99,9 @@ async def _poll_task(task_id: str, user_id: str, factory):
     yield f"event: error\ndata: {json.dumps({'code': 'TIMEOUT'})}\n\n"
 
 
-async def _get_task_or_404(db: AsyncSession, task_id: str, user_id: str) -> Task:
+async def _get_task_or_404(db: AsyncSession, task_id: str) -> Task:
     result = await db.execute(
-        select(Task).where(Task.id == task_id, Task.user_id == user_id)
+        select(Task).where(Task.id == task_id)
     )
     task = result.scalar_one_or_none()
     if task is None:

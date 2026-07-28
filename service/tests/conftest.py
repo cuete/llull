@@ -12,6 +12,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.config import get_cached_settings
 from app.database import Base, init_db
 from app.main import create_app
 from app.models.topic import Topic
@@ -19,6 +20,22 @@ from app.routers.deps import TEST_USER_ID
 
 # Use in-memory SQLite for tests
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@pytest.fixture(autouse=True)
+def _pin_settings_to_local_dev_defaults():
+    """Insulate tests from whatever the developer's local .env currently has set.
+
+    get_cached_settings() is a process-wide singleton read once from .env — without
+    this, flags like AUTH_ENABLED or READ_ONLY leak from the real .env into every
+    test that goes through the cached settings (health, read-only middleware, etc).
+    """
+    settings = get_cached_settings()
+    original = (settings.auth_enabled, settings.read_only)
+    settings.auth_enabled = False
+    settings.read_only = False
+    yield
+    settings.auth_enabled, settings.read_only = original
 
 
 @pytest.fixture(scope="session")

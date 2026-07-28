@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ErrorMessage } from "../../components/ErrorMessage";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
+import { useReadOnly } from "../../hooks/useReadOnly";
 import { deleteSource, factCheckSource, getTask, listSources } from "../../lib/api";
 import type { FactCheckClaim, Source } from "../../lib/types";
 import { AddSourceModal } from "./AddSourceModal";
@@ -56,13 +57,14 @@ function verdictIcon(verdict: string): string {
 interface RatingBadgesProps {
   source: Source;
   topicId: string;
+  readOnly: boolean;
   onFactCheckDone: (sourceId: string, updated: Source) => void;
 }
 
 // Which expand panel is open: null | "ai" | "quality" | "claims"
 type ExpandedPanel = null | "ai" | "quality" | "claims";
 
-const RatingBadges: FC<RatingBadgesProps> = ({ source, topicId, onFactCheckDone }) => {
+const RatingBadges: FC<RatingBadgesProps> = ({ source, topicId, readOnly, onFactCheckDone }) => {
   const queryClient = useQueryClient();
   const [fcLoading, setFcLoading] = useState(false);
   const [expanded, setExpanded] = useState<ExpandedPanel>(null);
@@ -131,7 +133,7 @@ const RatingBadges: FC<RatingBadgesProps> = ({ source, topicId, onFactCheckDone 
           >
             ✅ FC: {source.fact_check_score}%
           </button>
-        ) : (
+        ) : !readOnly ? (
           <button
             className={`${styles.ratingBadge} ${styles.ratingBadgeBtn}`}
             onClick={handleFactCheck}
@@ -139,7 +141,7 @@ const RatingBadges: FC<RatingBadgesProps> = ({ source, topicId, onFactCheckDone 
           >
             {fcLoading ? "⏳ Checking…" : "🔍 Fact Check"}
           </button>
-        )}
+        ) : null}
       </div>
 
       {/* Inline expand block — shared, shows reason or claims */}
@@ -271,6 +273,7 @@ const PendingCard: FC<PendingCardProps> = ({ topicId, task, onDone, onFailed, on
 
 export const SourcesTab: FC<SourcesTabProps> = ({ topicId }) => {
   const queryClient = useQueryClient();
+  const readOnly = useReadOnly();
   const [showAddModal, setShowAddModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Source | null>(null);
   const [pendingTasks, setPendingTasks] = useState<PendingTask[]>([]);
@@ -334,9 +337,11 @@ export const SourcesTab: FC<SourcesTabProps> = ({ topicId }) => {
         <span className={styles.toolbarTitle}>
           {totalCount} source{totalCount !== 1 ? "s" : ""}
         </span>
-        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-          + Add Source
-        </button>
+        {!readOnly && (
+          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+            + Add Source
+          </button>
+        )}
       </div>
 
       {!hasContent ? (
@@ -346,13 +351,15 @@ export const SourcesTab: FC<SourcesTabProps> = ({ topicId }) => {
           <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
             Add PDFs, web pages, or text to build your knowledge base
           </p>
-          <button
-            className="btn btn-primary"
-            style={{ marginTop: "0.5rem" }}
-            onClick={() => setShowAddModal(true)}
-          >
-            + Add First Source
-          </button>
+          {!readOnly && (
+            <button
+              className="btn btn-primary"
+              style={{ marginTop: "0.5rem" }}
+              onClick={() => setShowAddModal(true)}
+            >
+              + Add First Source
+            </button>
+          )}
         </div>
       ) : (
         <div className={styles.sourceList}>
@@ -390,28 +397,31 @@ export const SourcesTab: FC<SourcesTabProps> = ({ topicId }) => {
                   <RatingBadges
                     source={source}
                     topicId={topicId}
+                    readOnly={readOnly}
                     onFactCheckDone={handleFactCheckDone}
                   />
                 </div>
-                <div className={styles.sourceActions}>
-                  <button
-                    className={styles.deleteBtn}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteTarget(source);
-                    }}
-                    title="Delete source"
-                  >
-                    🗑️
-                  </button>
-                </div>
+                {!readOnly && (
+                  <div className={styles.sourceActions}>
+                    <button
+                      className={styles.deleteBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTarget(source);
+                      }}
+                      title="Delete source"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       )}
 
-      {showAddModal && (
+      {!readOnly && showAddModal && (
         <AddSourceModal
           topicId={topicId}
           onClose={() => setShowAddModal(false)}
