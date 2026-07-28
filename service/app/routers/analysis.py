@@ -48,6 +48,17 @@ async def analyze_l0(
                 detail="Topic already analyzed. View results at /graph, or pass ?force=true to re-analyze.",
             )
 
+    # Idempotency: skip LLM if nodes already exist (unless forced)
+    if not force:
+        existing = await db.execute(
+            select(Node).where(Node.topic_id == topic_id).limit(1)
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Topic already analyzed. View results at /graph, or pass ?force=true to re-analyze.",
+            )
+
     # Get sources to analyze
     if source_id:
         source_result = await db.execute(
