@@ -2,17 +2,15 @@
 // One container serves both the FastAPI backend and the built React frontend.
 // SQLite DB + local uploads persist on a mounted Azure Files share.
 //
-// Joins the shared Container Apps Environment (referenced as `existing`) rather
-// than creating its own, so the app lands at https://<appName>.<env default domain>.
+// Self-contained in its own resource group: this template also creates the
+// Container Apps Environment and its Log Analytics workspace, so the app lands at
+// https://<appName>.<env default domain>.
 //
 // maxReplicas is pinned to 1: SQLite is a single-writer store, so this app must
 // never scale out past one instance (scale-to-zero when idle is fine).
 
 @description('Container app name (becomes <name>.<env default domain>).')
 param appName string
-
-@description('Shared Container Apps Environment name.')
-param envName string = 'personal-mcp-env'
 
 @description('Azure region.')
 param location string = resourceGroup().location
@@ -62,8 +60,29 @@ var effectiveCorsOrigins = empty(corsOrigins)
   ? '["https://${appName}.${containerAppEnv.properties.defaultDomain}"]'
   : corsOrigins
 
-resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' existing = {
-  name: envName
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: '${appName}-logs'
+  location: location
+  properties: {
+    sku: { name: 'PerGB2018' }
+    retentionInDays: 30
+  }
+  tags: { managedby: 'claude-deploy' }
+}
+
+resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
+  name: '${appName}-env'
+  location: location
+  properties: {
+    appLogsConfiguration: {
+      destination: 'log-analytics'
+      logAnalyticsConfiguration: {
+        customerId: logAnalytics.properties.customerId
+        sharedKey: logAnalytics.listKeys().primarySharedKey
+      }
+    }
+  }
+  tags: { managedby: 'claude-deploy' }
 }
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
