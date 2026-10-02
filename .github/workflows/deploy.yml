@@ -84,7 +84,22 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # The image is always built and pushed; the Azure deploy waits until the required
+      # secret exists, so a merge before the secrets are set doesn't fail the run.
+      - name: Check deploy prerequisites
+        id: pre
+        run: |
+          if [ -n "$LLM_API_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::LLM_API_KEY secret is not set - image pushed, Azure deploy skipped. Set it and re-run this workflow."
+          fi
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+
       - uses: azure/login@v2
+        if: steps.pre.outputs.ready == 'true'
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -94,6 +109,7 @@ jobs:
       # GHCR_PULL_PAT and PERPLEXITY_API_KEY are optional: an empty pull PAT means the
       # GHCR package must be public.
       - name: Build Bicep parameters file
+        if: steps.pre.outputs.ready == 'true'
         run: |
           jq -n \
             --arg appName "${{ vars.AZURE_APP_NAME }}" \
@@ -123,6 +139,7 @@ jobs:
 
       - name: Deploy infra + container (Bicep)
         id: deploy
+        if: steps.pre.outputs.ready == 'true'
         uses: azure/arm-deploy@v2
         with:
           scope: resourcegroup
@@ -131,6 +148,7 @@ jobs:
           parameters: azuredeploy.parameters.json
 
       - name: Health check
+        if: steps.pre.outputs.ready == 'true'
         run: |
           url="${{ steps.deploy.outputs.appUrl }}"
           echo "Deployed to $url"
