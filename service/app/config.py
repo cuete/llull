@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     read_only: bool = False
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8080", "http://100.103.209.11:3000"]
 
+    # Static frontend (set when the built web/ SPA is served from this same app, e.g. in Docker)
+    static_dir: str = ""
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, v: str | list[str]) -> list[str]:

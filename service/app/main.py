@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import get_cached_settings
 from app.database import close_db, init_db
@@ -82,6 +84,20 @@ def create_app() -> FastAPI:
     app.include_router(export.router)
     app.include_router(tasks.router)
     app.include_router(fact_check.router)
+
+    # Serve the built frontend (web/dist), if present, from the same app/origin.
+    # Mounted last so it never shadows the API routes above. Known limitation: a
+    # hard refresh on /topics/{id} hits the API's JSON route instead of the SPA
+    # (both use that exact path shape) — normal in-app navigation is unaffected.
+    if settings.static_dir:
+        static_dir = Path(settings.static_dir)
+        index_html = static_dir / "index.html"
+
+        @app.get("/", include_in_schema=False)
+        async def serve_spa_root() -> FileResponse:
+            return FileResponse(index_html)
+
+        app.mount("/", StaticFiles(directory=static_dir), name="static")
 
     return app
 
