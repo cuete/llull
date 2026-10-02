@@ -1,0 +1,34 @@
+.git/
+.github/
+
+# Secrets — never bake into an image
+.env
+.env.local
+.env.*.local
+.certs/
+service/.env
+web/.env.local
+
+# Build artifacts / dependencies (reinstalled fresh in the image)
+**/node_modules/
+**/__pycache__/
+**/.venv/
+web/dist/
+web/tsconfig.tsbuildinfo
+service/data/
+service/*.db
+
+# Dev/test cruft not needed in the image
+**/.pytest_cache/
+**/htmlcov/
+**/.coverage
+**/.ruff_cache/
+**/.mypy_cache/
+service/check_chat.py
+service/clean_chat.py
+service/e2e_*.py
+web/temp/
+docs/
+scripts/
+infra/
+*.md

@@ -1,0 +1,159 @@
+name: Build, Push, Deploy (Llull)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Pull requests: prove the image builds and the Bicep compiles, without pushing or deploying.
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: llull:pr
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test container
+        run: |
+          docker run -d --name llull -p 8000:8000 llull:pr
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8000/health
+          curl -fsS http://localhost:8000/ | grep -qi '<html'
+          docker image ls llull:pr
+          docker logs llull | tail -n 20
+
+      - name: Compile Bicep
+        run: az bicep build --file infra/main.bicep --stdout > /dev/null
+
+  build-and-deploy:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute lowercase image repo (GHCR requires lowercase)
+        id: vars
+        run: echo "image_repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: |
+            VITE_MSAL_CLIENT_ID=${{ vars.AAD_CLIENT_ID }}
+          tags: |
+            ghcr.io/${{ steps.vars.outputs.image_repo }}:latest
+            ghcr.io/${{ steps.vars.outputs.image_repo }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The image is always built and pushed; the Azure deploy waits until the required
+      # secret exists, so a merge before the secrets are set doesn't fail the run.
+      - name: Check deploy prerequisites
+        id: pre
+        run: |
+          if [ -n "$LLM_API_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::LLM_API_KEY secret is not set - image pushed, Azure deploy skipped. Set it and re-run this workflow."
+          fi
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+
+      - uses: azure/login@v2
+        if: steps.pre.outputs.ready == 'true'
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # jq (not shell interpolation) so secret values with quotes/specials survive intact.
+      # GHCR_PULL_PAT and PERPLEXITY_API_KEY are optional: an empty pull PAT means the
+      # GHCR package must be public.
+      - name: Build Bicep parameters file
+        if: steps.pre.outputs.ready == 'true'
+        run: |
+          jq -n \
+            --arg appName "${{ vars.AZURE_APP_NAME }}" \
+            --arg containerImage "ghcr.io/${{ steps.vars.outputs.image_repo }}:${{ github.sha }}" \
+            --arg registryUsername "${{ github.repository_owner }}" \
+            --arg registryPassword "$GHCR_PULL_PAT" \
+            --arg llmApiKey "$LLM_API_KEY" \
+            --arg perplexityApiKey "$PERPLEXITY_API_KEY" \
+            --arg aadClientId "${{ vars.AAD_CLIENT_ID }}" \
+            '{
+              "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+              "contentVersion": "1.0.0.0",
+              "parameters": {
+                "appName": { "value": $appName },
+                "containerImage": { "value": $containerImage },
+                "registryUsername": { "value": $registryUsername },
+                "registryPassword": { "value": $registryPassword },
+                "llmApiKey": { "value": $llmApiKey },
+                "perplexityApiKey": { "value": $perplexityApiKey },
+                "aadClientId": { "value": $aadClientId }
+              }
+            }' > azuredeploy.parameters.json
+        env:
+          GHCR_PULL_PAT: ${{ secrets.GHCR_PULL_PAT }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+
+      - name: Deploy infra + container (Bicep)
+        id: deploy
+        if: steps.pre.outputs.ready == 'true'
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ vars.AZURE_RG }}
+          template: infra/main.bicep
+          parameters: azuredeploy.parameters.json
+
+      - name: Health check
+        if: steps.pre.outputs.ready == 'true'
+        run: |
+          url="${{ steps.deploy.outputs.appUrl }}"
+          echo "Deployed to $url"
+          for i in $(seq 1 30); do
+            if curl -fsS "$url/health"; then exit 0; fi
+            sleep 10
+          done
+          exit 1

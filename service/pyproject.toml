@@ -21,6 +21,8 @@ dependencies = [
     "python-multipart>=0.0.9",
     "sse-starlette>=2.1.0",
     "sentence-transformers>=3.0.0",
+    # Direct dep only so [tool.uv.sources] below can pin the CPU-only wheel on Linux.
+    "torch>=2.2.0",
     "tiktoken>=0.7.0",
     "pymupdf>=1.24.0",
     "python-docx>=1.1.2",
@@ -46,6 +48,16 @@ dev = [
     "ruff>=0.4.7",
     "respx>=0.21.1",
 ]
+
+# Linux (the container image) gets CPU-only torch — the default PyPI wheel drags in
+# several GB of NVIDIA CUDA libraries that a Container App can't use.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
