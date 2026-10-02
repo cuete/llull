@@ -140,3 +140,51 @@ async def test_upload_url_source_rejects_video_audio(
     assert response.status_code == 422, f"Expected 422 for {url}, got {response.status_code}"
     detail = response.json()["detail"]
     assert "not supported" in detail.lower(), f"Unexpected detail: {detail}"
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected"),
+    [
+        ("report.pdf", "pdf"),
+        ("Notes.DOCX", "docx"),
+        ("sheet.xlsx", "xlsx"),
+        ("readme.md", "text"),
+        ("plain.txt", "text"),
+        ("scan.JPEG", "image"),
+    ],
+)
+def test_resolve_file_source_type(filename: str, expected: str):
+    from app.routers.sources import _resolve_file_source_type
+
+    assert _resolve_file_source_type(filename) == expected
+
+
+@pytest.mark.asyncio
+async def test_upload_file_source_resolves_type_from_extension(
+    client: AsyncClient, sample_topic: Topic
+):
+    """The web UI posts source_type="file"; the parser type comes from the extension."""
+    from unittest.mock import AsyncMock, patch
+
+    with patch("app.routers.sources._run_ingest_background", new_callable=AsyncMock) as ingest:
+        response = await client.post(
+            f"/topics/{sample_topic.id}/sources",
+            data={"source_type": "file", "name": "notes.md"},
+            files={"file": ("notes.md", b"# Hello\n\nSome notes.", "text/markdown")},
+        )
+    assert response.status_code == 202
+    assert "task_id" in response.json()
+    assert ingest.call_args.kwargs["source_type"] == "text"
+
+
+@pytest.mark.asyncio
+async def test_upload_file_source_rejects_unsupported_extension(
+    client: AsyncClient, sample_topic: Topic
+):
+    response = await client.post(
+        f"/topics/{sample_topic.id}/sources",
+        data={"source_type": "file", "name": "tool.exe"},
+        files={"file": ("tool.exe", b"MZ", "application/octet-stream")},
+    )
+    assert response.status_code == 422
+    assert "Unsupported file type" in response.json()["detail"]

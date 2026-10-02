@@ -22,6 +22,31 @@ from app.services.llm.base import LLMAdapter
 
 router = APIRouter(prefix="/topics/{topic_id}/sources", tags=["sources"])
 
+# Uploaded files arrive with the generic source_type "file"; the concrete parser
+# type is resolved from the filename extension.
+_FILE_EXTENSION_TYPES: dict[str, str] = {
+    ".pdf": "pdf",
+    ".docx": "docx",
+    ".xlsx": "xlsx",
+    ".txt": "text",
+    ".md": "text",
+    ".png": "image",
+    ".jpg": "image",
+    ".jpeg": "image",
+    ".webp": "image",
+}
+
+
+def _resolve_file_source_type(filename: str | None) -> str:
+    suffix = Path(filename or "").suffix.lower()
+    source_type = _FILE_EXTENSION_TYPES.get(suffix)
+    if source_type is None:
+        supported = ", ".join(sorted(_FILE_EXTENSION_TYPES))
+        raise ValueError(
+            f"Unsupported file type {suffix or '(no extension)'!r}. Supported: {supported}"
+        )
+    return source_type
+
 
 async def _get_topic_or_404(db: AsyncSession, topic_id: str) -> Topic:
     result = await db.execute(
@@ -64,6 +89,14 @@ async def upload_source(
     if source_type == "url" and content:
         try:
             _check_unsupported_url(content)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if source_type == "file":
+        if file is None:
+            raise HTTPException(status_code=422, detail="No file provided")
+        try:
+            source_type = _resolve_file_source_type(file.filename)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
