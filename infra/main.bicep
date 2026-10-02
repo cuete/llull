@@ -28,7 +28,7 @@ param registryUsername string = ''
 @secure()
 param registryPassword string = ''
 
-@description('LLM provider API key (Anthropic/OpenAI/OpenRouter, depending on LLM_PROVIDER).')
+@description('LLM provider API key (an Anthropic API key with the default llmProvider).')
 @secure()
 param llmApiKey string
 
@@ -40,13 +40,13 @@ param perplexityApiKey string = ''
 param aadClientId string
 
 @description('LLM provider name.')
-param llmProvider string = 'openai'
+param llmProvider string = 'anthropic'
 
 @description('LLM model identifier.')
-param llmModel string = 'anthropic/claude-sonnet-4-5'
+param llmModel string = 'claude-sonnet-5-5'
 
-@description('LLM base URL override (e.g. OpenRouter).')
-param llmBaseUrl string = 'https://openrouter.ai/api/v1'
+@description('LLM base URL override (e.g. OpenRouter with llmProvider=openai). Leave empty for the provider default.')
+param llmBaseUrl string = ''
 
 @description('Allowed CORS origins, JSON array as a string. Defaults to the app\'s own origin.')
 param corsOrigins string = ''
@@ -170,12 +170,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               { name: 'STORAGE_BACKEND', value: 'local' }
               { name: 'LLM_PROVIDER', value: llmProvider }
               { name: 'LLM_MODEL', value: llmModel }
-              { name: 'LLM_BASE_URL', value: llmBaseUrl }
               { name: 'LLM_API_KEY', secretRef: 'llm-api-key' }
               { name: 'CORS_ORIGINS', value: effectiveCorsOrigins }
               { name: 'READ_ONLY', value: 'false' }
             ],
-            usePerplexity ? [{ name: 'PERPLEXITY_API_KEY', secretRef: 'perplexity-api-key' }] : []
+            empty(llmBaseUrl) ? [] : [{ name: 'LLM_BASE_URL', value: llmBaseUrl }],
+            usePerplexity ?[{ name: 'PERPLEXITY_API_KEY', secretRef: 'perplexity-api-key' }] : []
           )
           volumeMounts: [
             { volumeName: 'data', mountPath: '/app/data' }
