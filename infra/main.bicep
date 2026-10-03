@@ -39,6 +39,10 @@ param perplexityApiKey string = ''
 @description('Microsoft identity platform app registration client ID (not secret, but kept as a param for clarity).')
 param aadClientId string
 
+@description('Comma-separated account IDs (token oid) allowed to use the app. Required: the URL is public and any personal Microsoft account can sign in.')
+@minLength(1)
+param allowedUserIds string
+
 @description('LLM provider name.')
 param llmProvider string = 'anthropic'
 
@@ -165,6 +169,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               { name: 'AUTH_ENABLED', value: 'true' }
               { name: 'AAD_TENANT_ID', value: 'consumers' }
               { name: 'AAD_CLIENT_ID', value: aadClientId }
+              { name: 'ALLOWED_USER_IDS', value: string(split(replace(allowedUserIds, ' ', ''), ',')) }
               { name: 'DATABASE_URL', value: 'sqlite+aiosqlite:////app/data/llull.db' }
               { name: 'LOCAL_STORAGE_PATH', value: '/app/data/uploads' }
               { name: 'STORAGE_BACKEND', value: 'local' }

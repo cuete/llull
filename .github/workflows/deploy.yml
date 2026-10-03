@@ -119,6 +119,7 @@ jobs:
             --arg llmApiKey "$LLM_API_KEY" \
             --arg perplexityApiKey "$PERPLEXITY_API_KEY" \
             --arg aadClientId "${{ vars.AAD_CLIENT_ID }}" \
+            --arg allowedUserIds "${{ vars.ALLOWED_USER_IDS }}" \
             '{
               "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
               "contentVersion": "1.0.0.0",
@@ -129,7 +130,8 @@ jobs:
                 "registryPassword": { "value": $registryPassword },
                 "llmApiKey": { "value": $llmApiKey },
                 "perplexityApiKey": { "value": $perplexityApiKey },
-                "aadClientId": { "value": $aadClientId }
+                "aadClientId": { "value": $aadClientId },
+                "allowedUserIds": { "value": $allowedUserIds }
               }
             }' > azuredeploy.parameters.json
         env:
