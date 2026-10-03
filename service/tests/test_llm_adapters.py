@@ -104,3 +104,30 @@ async def test_openai_adapter_missing_import():
     with patch("builtins.__import__", side_effect=mock_import):
         with pytest.raises(ImportError, match="openai package is required"):
             adapter._get_client()
+
+
+@pytest.mark.asyncio
+async def test_anthropic_adapter_batch_skips_thinking_blocks():
+    """Models that think by default return a thinking block before the text block."""
+    from types import SimpleNamespace
+
+    adapter = AnthropicAdapter(api_key="test", model="claude-sonnet-5-5")
+    client = MagicMock()
+    client.messages.create = AsyncMock(
+        return_value=SimpleNamespace(
+            content=[
+                SimpleNamespace(type="thinking", thinking=""),
+                SimpleNamespace(type="text", text="Hello "),
+                SimpleNamespace(type="text", text="world"),
+            ]
+        )
+    )
+    adapter._client = client
+
+    result = ""
+    async for token in await adapter.complete([{"role": "user", "content": "hi"}]):
+        result += token
+
+    assert result == "Hello world"
+    # Thinking counts against max_tokens, so the default must leave headroom
+    assert client.messages.create.call_args.kwargs["max_tokens"] >= 16000
