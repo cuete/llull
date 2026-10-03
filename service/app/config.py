@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     auth_enabled: bool = False
     aad_tenant_id: str = "test-tenant"
     aad_client_id: str = "test-client"
+    # Account IDs (token `oid`) allowed to use the API when auth is enabled.
+    # Empty means any account that can sign in is accepted.
+    allowed_user_ids: list[str] = []
 
     # Database
     database_url: str = "sqlite+aiosqlite:///./data/llull.db"
@@ -54,7 +57,7 @@ class Settings(BaseSettings):
     # Static frontend (set when the built web/ SPA is served from this same app, e.g. in Docker)
     static_dir: str = ""
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "allowed_user_ids", mode="before")
     @classmethod
     def parse_cors_origins(cls, v: str | list[str]) -> list[str]:
         if isinstance(v, str):

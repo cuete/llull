@@ -45,7 +45,12 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="Missing authorization header")
 
     token = credentials.credentials
-    return await _validate_aad_token(token, settings)
+    user_id = await _validate_aad_token(token, settings)
+
+    if settings.allowed_user_ids and user_id not in settings.allowed_user_ids:
+        log.warning("user_not_allowed", user_id=user_id)
+        raise HTTPException(status_code=403, detail="This account is not allowed to use Llull")
+    return user_id
 
 
 async def _validate_aad_token(token: str, settings: Settings) -> str:
