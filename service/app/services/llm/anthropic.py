@@ -42,7 +42,9 @@ class AnthropicAdapter(LLMAdapter):
         self,
         messages: list[dict],
         stream: bool = False,
-        max_tokens: int = 4096,
+        # Current Claude models think by default and thinking counts against
+        # max_tokens, so the cap needs headroom beyond the visible answer.
+        max_tokens: int = 16000,
     ) -> AsyncIterator[str]:
         client = self._get_client()
         log.info("llm_complete", provider="anthropic", model=self._model, stream=stream)
@@ -88,7 +90,8 @@ class AnthropicAdapter(LLMAdapter):
             kwargs["system"] = system
 
         response = await client.messages.create(**kwargs)
-        yield response.content[0].text
+        # content mixes block types (thinking blocks come first); only text blocks carry the answer
+        yield "".join(block.text for block in response.content if block.type == "text")
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         # Anthropic doesn't have a native embeddings API

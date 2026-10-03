@@ -6,6 +6,7 @@ import re
 
 import structlog
 
+from app.services.analysis import detect_language, language_name_for
 from app.services.llm.base import LLMAdapter
 
 log = structlog.get_logger()
@@ -14,10 +15,12 @@ RATING_PROMPT = """You are a document quality analyst. Analyze the following tex
 
 {
   "ai_suspicion": <int 0-100 or null>,
-  "ai_suspicion_reason": "<1-2 sentences in the document's language>",
+  "ai_suspicion_reason": "<1-2 sentences in __LANGUAGE__>",
   "quality_score": <int 0-100 or null>,
-  "quality_reason": "<1-2 sentences in the document's language>"
+  "quality_reason": "<1-2 sentences in __LANGUAGE__>"
 }
+
+IMPORTANT: Write both reasons in __LANGUAGE__, regardless of any other language that appears in the text.
 
 AI SUSPICION criteria (do NOT consider grammar errors or lack thereof):
 - Excessive repetitive use of superlative adjectives ("comprehensive", "robust", "innovative", "seamless", "cutting-edge")
@@ -120,7 +123,11 @@ class RatingService:
         # Sample evenly from across the full document so beginning, middle,
         # and end are all represented in the rating
         sample = _distributed_sample(text)
-        messages = [{"role": "user", "content": RATING_PROMPT + sample}]
+        # Name the language explicitly: left to infer "the document's language",
+        # the model has answered in a different one.
+        language_name = language_name_for(detect_language(text))
+        prompt = RATING_PROMPT.replace("__LANGUAGE__", language_name)
+        messages = [{"role": "user", "content": prompt + sample}]
 
         try:
             response = ""

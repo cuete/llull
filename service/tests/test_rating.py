@@ -167,3 +167,32 @@ async def test_rate_source_llm_exception():
     result = await svc.rate_source("word " * 400)
     assert result["ai_suspicion"] is None
     assert result["quality_score"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("The philosopher argues that images have replaced reality in modern society. ", "English"),
+        ("El filósofo sostiene que las imágenes han reemplazado a la realidad en la sociedad. ", "Spanish"),
+    ],
+)
+async def test_rate_source_names_the_document_language(sentence: str, language: str):
+    """The prompt states the detected language explicitly instead of leaving it to the model."""
+    captured: dict = {}
+
+    async def mock_complete(messages, stream=False, **kwargs):
+        captured["prompt"] = messages[0]["content"]
+
+        async def gen():
+            yield "{}"
+
+        return gen()
+
+    llm = MagicMock()
+    llm.complete = mock_complete
+
+    await RatingService(llm).rate_source(sentence * 60)
+
+    assert f"1-2 sentences in {language}" in captured["prompt"]
+    assert "__LANGUAGE__" not in captured["prompt"]
