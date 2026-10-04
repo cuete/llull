@@ -101,7 +101,13 @@ export const ChatTab: FC<ChatTabProps> = ({
   // Accumulate streamed content so onDone can inspect it for node mentions
   const lastStreamedContentRef = useRef<string>("");
 
-  const { data: history, isLoading, error } = useQuery({
+  const {
+    data: history,
+    isLoading,
+    error,
+    isFetching: isHistoryFetching,
+    isFetchedAfterMount: isHistoryFresh,
+  } = useQuery({
     queryKey: ["chat-history", topicId],
     queryFn: () => getChatHistory(topicId),
     staleTime: 0,
@@ -163,6 +169,11 @@ export const ChatTab: FC<ChatTabProps> = ({
     if (
       !readOnly &&
       !starterTriggeredRef.current &&
+      // Only trust an empty history the server confirmed after this mount. The tab
+      // unmounts on tab switch, so a remount can see a cached empty history from
+      // before the starter ran and would send it a second time.
+      isHistoryFresh &&
+      !isHistoryFetching &&
       history !== undefined &&
       history.length === 0 &&
       localMessages.length === 0 &&
@@ -184,7 +195,7 @@ export const ChatTab: FC<ChatTabProps> = ({
       startStream(`/topics/${topicId}/chat`, { message: starterMsg });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history, graph, readOnly]);
+  }, [history, graph, readOnly, isHistoryFresh, isHistoryFetching]);
 
   // Auto-send pendingZoomMessage when it arrives and we're not already streaming
   useEffect(() => {
