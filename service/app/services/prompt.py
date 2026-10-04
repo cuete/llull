@@ -48,6 +48,22 @@ def count_tokens(text: str) -> int:
         return len(text) // 4
 
 
+def source_token_budget(
+    system_prompt: str,
+    context_summary: str | None,
+    conversation_history: list[dict],
+    max_tokens: int = MAX_CONTEXT_TOKENS,
+) -> int:
+    """Tokens build_chat_context will have left for source texts."""
+    full_system = system_prompt
+    if context_summary:
+        full_system += f"\n\n## Topic Context\n{context_summary}"
+    budget = max_tokens - count_tokens(full_system)
+    recent_turns = conversation_history[-MAX_CONVERSATION_TURNS * 2 :]
+    turn_tokens = sum(count_tokens(m.get("content", "")) for m in recent_turns)
+    return budget - min(turn_tokens, budget // 2)
+
+
 def build_chat_context(
     system_prompt: str,
     context_summary: str | None,
