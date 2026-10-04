@@ -11,14 +11,22 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings, get_cached_settings
 from app.database import get_db
-from app.models.source import Source
+from app.models.source import Chunk, Source
 from app.models.topic import Conversation, Topic
-from app.routers.deps import get_current_user, get_llm_adapter
+from app.routers.deps import get_current_user, get_embedding_service, get_llm_adapter
 from app.models.graph import Node, Edge
 from app.schemas.topic import ChatRequest, ConversationResponse
+from app.services.embeddings import EmbeddingService
 from app.services.llm.base import LLMAdapter
-from app.services.prompt import LLULL_SYSTEM_PROMPT, build_chat_context
+from app.services.prompt import (
+    LLULL_SYSTEM_PROMPT,
+    build_chat_context,
+    count_tokens,
+    source_token_budget,
+)
+from app.services.retrieval import ExcerptChunk, build_excerpt_context
 
 log = structlog.get_logger()
 
@@ -47,6 +55,8 @@ async def chat(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     llm: LLMAdapter = Depends(get_llm_adapter),
+    embedding_service: EmbeddingService = Depends(get_embedding_service),
+    settings: Settings = Depends(get_cached_settings),
 ) -> StreamingResponse:
     topic = await _get_topic_or_404(db, topic_id)
 
@@ -80,11 +90,25 @@ async def chat(
 
     # Build messages
     conversation_dicts = [{"role": m.role, "content": m.content} for m in history]
+
+    # Sources too large for the context: send excerpts from across the whole of them
+    # (plus the concept map) instead of letting build_chat_context keep only the start.
+    source_budget = source_token_budget(
+        LLULL_SYSTEM_PROMPT, topic.context_summary, conversation_dicts, settings.chat_context_tokens
+    )
+    if sum(count_tokens(t) for t in source_texts) > source_budget:
+        source_texts = [
+            await _build_excerpt_source_text(
+                db, topic_id, body.message, sources, embedding_service, source_budget
+            )
+        ]
+
     messages = build_chat_context(
         system_prompt=LLULL_SYSTEM_PROMPT,
         context_summary=topic.context_summary,
         conversation_history=conversation_dicts,
         source_texts=source_texts,
+        max_tokens=settings.chat_context_tokens,
     )
 
     # Build DB-sourced mermaid block for first message (replaces any LLM-generated chart)
@@ -126,6 +150,45 @@ async def chat(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+async def _build_excerpt_source_text(
+    db: AsyncSession,
+    topic_id: str,
+    question: str,
+    sources: list[Source],
+    embedding_service: EmbeddingService,
+    token_budget: int,
+) -> str:
+    source_names = {s.id: s.name for s in sources}
+    source_position = {s.id: i for i, s in enumerate(sources)}
+
+    chunks_result = await db.execute(select(Chunk).where(Chunk.topic_id == topic_id))
+    chunks = sorted(
+        (c for c in chunks_result.scalars().all() if c.source_id in source_names),
+        key=lambda c: (source_position[c.source_id], c.order),
+    )
+    nodes_result = await db.execute(
+        select(Node).where(Node.topic_id == topic_id).order_by(Node.created_at)
+    )
+
+    return await build_excerpt_context(
+        question=question,
+        chunks=[
+            ExcerptChunk(
+                source_name=source_names[c.source_id],
+                order=c.order,
+                text=c.text,
+                embedding=embedding_service.deserialize(c.embedding_json)
+                if c.embedding_json
+                else None,
+            )
+            for c in chunks
+        ],
+        concepts=[(n.label, n.description or "") for n in nodes_result.scalars().all()],
+        embedding_service=embedding_service,
+        token_budget=token_budget,
     )
 
 

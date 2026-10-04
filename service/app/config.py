@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     azure_storage_connection_string: str = ""
     azure_storage_container: str = "llull-sources"
 
+    # Token budget for one chat request (system prompt + history + sources). Sources
+    # that don't fit are sent as excerpts; raise this for large-context models.
+    chat_context_tokens: int = 100_000
+
     # Embeddings
     embedding_model: str = "all-mpnet-base-v2"
 
