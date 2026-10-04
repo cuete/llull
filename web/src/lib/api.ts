@@ -211,7 +211,18 @@ export type AnalysisSSEEvent =
   | { type: "progress"; data: { step: string; pct: number } }
   | { type: "nodes_updated"; data: { new_nodes: unknown[]; new_edges: unknown[] } }
   | { type: "document_updated"; data: { blocks: number } }
-  | { type: "done"; data: { source_id: string; nodes: number; edges: number } }
+  | {
+      type: "done";
+      data: {
+        source_id: string;
+        nodes: number;
+        edges: number;
+        /** True when the map was built from a sample of the text, not all of it */
+        sampled?: boolean;
+        read_tokens?: number;
+        content_tokens?: number;
+      };
+    }
   | { type: "error"; data: { code: string; message: string } };
 
 /**
@@ -221,8 +232,9 @@ export type AnalysisSSEEvent =
 export async function analyzeTopicStream(
   topicId: string,
   onEvent: (event: AnalysisSSEEvent) => void,
+  force = false,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/topics/${topicId}/analyze`, {
+  const res = await fetch(`${API_BASE}/topics/${topicId}/analyze${force ? "?force=true" : ""}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
   });
@@ -271,7 +283,10 @@ export async function analyzeTopicStream(
 
 export type ZoomSSEEvent =
   | { type: "progress"; data: { step: string } }
-  | { type: "done"; data: { sub_nodes: number; sub_edges: number } }
+  | {
+      type: "done";
+      data: { sub_nodes: number; new_links?: number; revised_links?: number; fully_read?: boolean };
+    }
   | { type: "error"; data: { code: string; message: string } };
 
 /**
