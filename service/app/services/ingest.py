@@ -16,6 +16,7 @@ from app.parsers import get_parser
 from app.services.embeddings import EmbeddingService
 from app.services.prompt import count_tokens
 from app.services.rating import RatingService
+from app.services.sections import ensure_sections
 
 if TYPE_CHECKING:
     pass
@@ -201,6 +202,9 @@ class IngestService:
         except Exception as e:
             log.warning("embedding_generation_failed", source_id=source.id, error=str(e))
             # Continue in degraded mode — source usable without embeddings
+
+        # 5b. Group chunks into sections (chapters/headings) for layered analysis
+        await ensure_sections(self._db, source)
 
         # 6. Rate the source (AI suspicion + quality score)
         if self._llm is not None:

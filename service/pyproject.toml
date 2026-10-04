@@ -21,6 +21,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "sse-starlette>=2.1.0",
     "sentence-transformers>=3.0.0",
+    "numpy>=1.26.0",
     # Direct dep only so [tool.uv.sources] below can pin the CPU-only wheel on Linux.
     "torch>=2.2.0",
     "tiktoken>=0.7.0",

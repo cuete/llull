@@ -75,6 +75,11 @@ export const NodeSchema = z.object({
   label: z.string(),
   description: z.string(),
   status: z.enum(["unexplored", "zoomed"]),
+  // Layer: 0 = general map, deeper layers come from zooming into a node
+  level: z.number(),
+  parent_id: z.string().nullable(),
+  // Share (0-1) of the source's content this node stands for
+  coverage: z.number().nullable(),
   created_at: z.string(),
 });
 
@@ -87,6 +92,11 @@ export const EdgeSchema = z.object({
   type: z.enum(["relational", "hierarchical", "causal"]),
   weight: z.number(),
   confidence: z.number(),
+  // How the link is grounded: read from a node's full text, inferred from a sample,
+  // or only suggested by similarity (nothing read)
+  basis: z.enum(["read", "sampled", "suggested"]),
+  status: z.enum(["active", "unsupported"]),
+  evidence: z.string().nullable(),
   created_at: z.string(),
 });
 

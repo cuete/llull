@@ -93,8 +93,14 @@ async def chat(
 
     # Sources too large for the context: send excerpts from across the whole of them
     # (plus the concept map) instead of letting build_chat_context keep only the start.
-    source_budget = source_token_budget(
-        LLULL_SYSTEM_PROMPT, topic.context_summary, conversation_dicts, settings.chat_context_tokens
+    source_budget = min(
+        settings.chat_source_tokens,
+        source_token_budget(
+            LLULL_SYSTEM_PROMPT,
+            topic.context_summary,
+            conversation_dicts,
+            settings.chat_context_tokens,
+        ),
     )
     if sum(count_tokens(t) for t in source_texts) > source_budget:
         source_texts = [
@@ -169,8 +175,9 @@ async def _build_excerpt_source_text(
         (c for c in chunks_result.scalars().all() if c.source_id in source_names),
         key=lambda c: (source_position[c.source_id], c.order),
     )
+    # General map first, then deeper layers, so the overview keeps the top layer whole
     nodes_result = await db.execute(
-        select(Node).where(Node.topic_id == topic_id).order_by(Node.created_at)
+        select(Node).where(Node.topic_id == topic_id).order_by(Node.level, Node.created_at)
     )
 
     return await build_excerpt_context(

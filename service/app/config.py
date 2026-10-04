@@ -45,6 +45,17 @@ class Settings(BaseSettings):
     # Token budget for one chat request (system prompt + history + sources). Sources
     # that don't fit are sent as excerpts; raise this for large-context models.
     chat_context_tokens: int = 100_000
+    # Sources larger than this are sent to the chat as an overview of the map plus the
+    # passages relevant to the question, not whole.
+    chat_source_tokens: int = 12_000
+
+    # Layered analysis. Sources up to l0_full_read_tokens are read whole for the general
+    # map; larger ones are sampled (a share of the content, capped). A zoom reads a
+    # node's own text in full up to zoom_read_tokens.
+    l0_full_read_tokens: int = 15_000
+    l0_sample_share: float = 0.25
+    l0_sample_max_tokens: int = 60_000
+    zoom_read_tokens: int = 24_000
 
     # Embeddings
     embedding_model: str = "all-mpnet-base-v2"

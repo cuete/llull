@@ -7,7 +7,7 @@ import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { useReadOnly } from "../../hooks/useReadOnly";
 import { useTheme } from "../../hooks/useTheme";
 import { analyzeTopicStream, getGraph, zoomNodeStream } from "../../lib/api";
-import type { GraphResponse } from "../../lib/types";
+import type { GraphEdge, GraphNode, GraphResponse } from "../../lib/types";
 import styles from "./MapTab.module.css";
 
 interface MapTabProps {
@@ -21,7 +21,7 @@ interface MapTabProps {
 
 const MAX_RENDER_NODES = 80;
 
-function buildMermaidGraph(graph: GraphResponse, nodeLimit = MAX_RENDER_NODES): string {
+export function buildMermaidGraph(graph: GraphResponse, nodeLimit = MAX_RENDER_NODES): string {
   const nodes = graph.nodes.slice(0, nodeLimit);
   const nodeIdSet = new Set(nodes.map((n) => n.id));
   const edges = graph.edges.filter(
@@ -39,11 +39,34 @@ function buildMermaidGraph(graph: GraphResponse, nodeLimit = MAX_RENDER_NODES): 
   for (const edge of edges) {
     const from = edge.from_node_id.replace(/-/g, "_");
     const to = edge.to_node_id.replace(/-/g, "_");
-    const arrow = edge.type === "hierarchical" ? "-->" : edge.type === "causal" ? "-..->" : "---";
-    lines.push(`  ${from} ${arrow} ${to}`);
+    lines.push(`  ${from} ${edgeArrow(edge)} ${to}`);
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Line style shows how well a link is grounded: thick = read from the node's full text,
+ * normal = inferred from a sample, dotted = only suggested (or no longer supported).
+ * An arrowhead marks hierarchical and causal links.
+ */
+function edgeArrow(edge: GraphEdge): string {
+  const directed = edge.type !== "relational";
+  if (edge.status === "unsupported") return "-. ✗ .-";
+  if (edge.basis === "suggested") return "-. ? .-";
+  if (edge.basis === "read") return directed ? "==>" : "===";
+  return directed ? "-->" : "---";
+}
+
+function nodeTooltip(node: GraphNode): string {
+  const parts = [node.description];
+  const facts: string[] = [];
+  if (node.coverage !== null) {
+    facts.push(`Covers ${(node.coverage * 100).toFixed(node.coverage < 0.1 ? 1 : 0)}% of the source`);
+  }
+  facts.push(node.status === "zoomed" ? "explored" : "not explored yet — click to zoom");
+  parts.push(facts.join(" · "));
+  return parts.join("\n\n");
 }
 
 export const MapTab: FC<MapTabProps> = ({
@@ -108,7 +131,7 @@ export const MapTab: FC<MapTabProps> = ({
   const addTooltipsToSvg = useCallback((g: GraphResponse) => {
     const svgEl = containerRef.current?.querySelector("svg");
     if (!svgEl || !g.nodes.length) return;
-    const nodeMap = new Map(g.nodes.map((n) => [n.label, n.description]));
+    const nodeMap = new Map(g.nodes.map((n) => [n.label, nodeTooltip(n)]));
     svgEl.querySelectorAll(".node").forEach((el) => {
       const labelEl = el.querySelector(".label, text");
       const label = labelEl?.textContent?.trim();
@@ -156,7 +179,10 @@ export const MapTab: FC<MapTabProps> = ({
         if (event.type === "progress") {
           setAnalyzeStatus(`Zooming: ${event.data.step}`);
         } else if (event.type === "done") {
-          setAnalyzeStatus(`Zoomed into ${nodeLabel} — ${event.data.sub_nodes} sub-nodes`);
+          const { sub_nodes, new_links = 0, revised_links = 0 } = event.data;
+          setAnalyzeStatus(
+            `Zoomed into ${nodeLabel} — ${sub_nodes} sub-nodes, ${new_links} new links, ${revised_links} links revised`,
+          );
           void queryClient.invalidateQueries({ queryKey: ["graph", topicId] });
           // Fire callback to trigger auto-chat on zoom completion
           onZoomComplete?.(nodeLabel, []);
@@ -239,6 +265,13 @@ export const MapTab: FC<MapTabProps> = ({
 
   const handleAnalyze = useCallback(async () => {
     if (readOnly) return;
+    const hasMap = (graphRef.current?.nodes.length ?? 0) > 0;
+    if (
+      hasMap &&
+      !window.confirm("Re-analyze the sources? This replaces the current map, including zoomed layers.")
+    ) {
+      return;
+    }
     setAnalyzing(true);
     setAnalyzeProgress(0);
     setAnalyzeStatus("Starting analysis…");
@@ -252,14 +285,19 @@ export const MapTab: FC<MapTabProps> = ({
         } else if (event.type === "document_updated") {
           setAnalyzeStatus(`Document ready (${event.data.blocks} blocks)`);
         } else if (event.type === "done") {
-          setAnalyzeStatus(`Done — ${event.data.nodes} nodes, ${event.data.edges} edges`);
+          const { nodes, edges, sampled, read_tokens, content_tokens } = event.data;
+          const share =
+            sampled && read_tokens && content_tokens
+              ? ` · read ${Math.round((read_tokens / content_tokens) * 100)}% of the text`
+              : "";
+          setAnalyzeStatus(`Done — ${nodes} nodes, ${edges} edges${share}`);
           setAnalyzeProgress(100);
           // Force fresh fetch (bypass staleTime cache) after analysis completes
           void queryClient.invalidateQueries({ queryKey: ["graph", topicId] });
         } else if (event.type === "error") {
           setAnalyzeError(event.data.message);
         }
-      });
+      }, hasMap);
     } catch (err) {
       setAnalyzeError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
@@ -288,12 +326,24 @@ export const MapTab: FC<MapTabProps> = ({
             disabled={analyzing}
             title="Analyze sources and build knowledge graph"
           >
-            {analyzing ? `⏳ Analyzing… ${analyzeProgress}%` : "🧠 Analyze Sources"}
+            {analyzing
+              ? `⏳ Analyzing… ${analyzeProgress}%`
+              : isEmpty
+                ? "🧠 Analyze Sources"
+                : "🧠 Re-analyze"}
           </button>
         )}
         {graph && (
           <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
             {graph.nodes.length} nodes · {graph.edges.length} edges
+          </span>
+        )}
+        {!isEmpty && (
+          <span
+            style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}
+            title="How each link is grounded in the text"
+          >
+            Links: ━ read · ─ sampled · ┄ suggested
           </span>
         )}
       </div>

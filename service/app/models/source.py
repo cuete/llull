@@ -51,6 +51,9 @@ class Source(Base):
     chunks: Mapped[list["Chunk"]] = relationship(
         "Chunk", back_populates="source", cascade="all, delete-orphan"
     )
+    sections: Mapped[list["Section"]] = relationship(
+        "Section", cascade="all, delete-orphan"
+    )
     document_blocks: Mapped[list["DocumentBlock"]] = relationship(  # noqa: F821
         "DocumentBlock", back_populates="source"
     )
@@ -70,5 +73,24 @@ class Chunk(Base):
     # Embedding stored as JSON blob (float list) — sqlite-vec integration would use a vector column
     embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     order: Mapped[int] = mapped_column(nullable=False, default=0)
+    section_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     source: Mapped["Source"] = relationship("Source", back_populates="chunks")
+
+
+class Section(Base):
+    """A run of consecutive chunks of a source: a chapter, a headed part, or a fixed window."""
+
+    __tablename__ = "sections"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    source_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("sources.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    topic_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("topics.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    order: Mapped[int] = mapped_column(nullable=False, default=0)
+    title: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    # Front/back matter (contents, notes, bibliography, index): never mapped into nodes
+    is_boilerplate: Mapped[bool] = mapped_column(nullable=False, default=False)

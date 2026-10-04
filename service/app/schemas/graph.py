@@ -14,6 +14,9 @@ class NodeResponse(BaseModel):
     label: str
     description: str
     status: Literal["unexplored", "zoomed"]
+    level: int = 0
+    parent_id: str | None = None
+    coverage: float | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -26,6 +29,9 @@ class EdgeResponse(BaseModel):
     type: Literal["relational", "hierarchical", "causal"]
     weight: float
     confidence: float
+    basis: Literal["sampled", "read", "suggested"] = "read"
+    status: Literal["active", "unsupported"] = "active"
+    evidence: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
