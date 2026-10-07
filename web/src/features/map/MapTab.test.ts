@@ -59,6 +59,18 @@ describe("buildMermaidGraph", () => {
     expect(definition).toContain("a -. ✗ .- d"); // no longer supported
   });
 
+  it("outlines explored and unexplored nodes in different colours", () => {
+    const definition = buildMermaidGraph(
+      { nodes: [node("a", { status: "zoomed" }), node("b")], edges: [] },
+      80,
+      { unexplored: "#111111", zoomed: "#222222" },
+    );
+    expect(definition).toContain('a["Node a"]:::zoomed');
+    expect(definition).toContain('b("Node b"):::unexplored');
+    expect(definition).toContain("classDef unexplored stroke:#111111");
+    expect(definition).toContain("classDef zoomed stroke:#222222");
+  });
+
   it("produces a definition mermaid accepts", async () => {
     mermaid.initialize({ startOnLoad: false });
     await expect(mermaid.parse(buildMermaidGraph(graph))).resolves.toBeTruthy();

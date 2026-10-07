@@ -4,6 +4,7 @@ import type { FC } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorMessage } from "../../components/ErrorMessage";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
+import { usePanZoom } from "../../hooks/usePanZoom";
 import { useReadOnly } from "../../hooks/useReadOnly";
 import { useTheme } from "../../hooks/useTheme";
 import { analyzeTopicStream, getGraph, zoomNodeStream } from "../../lib/api";
@@ -21,7 +22,28 @@ interface MapTabProps {
 
 const MAX_RENDER_NODES = 80;
 
-export function buildMermaidGraph(graph: GraphResponse, nodeLimit = MAX_RENDER_NODES): string {
+export interface NodeColors {
+  unexplored: string;
+  zoomed: string;
+}
+
+// Same colours as the legend under the map (--accent / --success)
+const DEFAULT_NODE_COLORS: NodeColors = { unexplored: "#6366f1", zoomed: "#22c55e" };
+
+/** The legend's colours as currently themed, so the map matches it in light and dark. */
+function themedNodeColors(): NodeColors {
+  const css = getComputedStyle(document.documentElement);
+  return {
+    unexplored: css.getPropertyValue("--accent").trim() || DEFAULT_NODE_COLORS.unexplored,
+    zoomed: css.getPropertyValue("--success").trim() || DEFAULT_NODE_COLORS.zoomed,
+  };
+}
+
+export function buildMermaidGraph(
+  graph: GraphResponse,
+  nodeLimit = MAX_RENDER_NODES,
+  colors: NodeColors = DEFAULT_NODE_COLORS,
+): string {
   const nodes = graph.nodes.slice(0, nodeLimit);
   const nodeIdSet = new Set(nodes.map((n) => n.id));
   const edges = graph.edges.filter(
@@ -33,8 +55,12 @@ export function buildMermaidGraph(graph: GraphResponse, nodeLimit = MAX_RENDER_N
   for (const node of nodes) {
     const safeLabel = node.label.replace(/["\[\]{}]/g, "").substring(0, 40);
     const shape = node.status === "zoomed" ? `["${safeLabel}"]` : `("${safeLabel}")`;
-    lines.push(`  ${node.id.replace(/-/g, "_")}${shape}`);
+    lines.push(`  ${node.id.replace(/-/g, "_")}${shape}:::${node.status}`);
   }
+
+  // Outline each node in its legend colour: explored (zoomed) vs not yet explored
+  lines.push(`  classDef unexplored stroke:${colors.unexplored},stroke-width:2px`);
+  lines.push(`  classDef zoomed stroke:${colors.zoomed},stroke-width:3px`);
 
   for (const edge of edges) {
     const from = edge.from_node_id.replace(/-/g, "_");
@@ -64,7 +90,7 @@ function nodeTooltip(node: GraphNode): string {
   if (node.coverage !== null) {
     facts.push(`Covers ${(node.coverage * 100).toFixed(node.coverage < 0.1 ? 1 : 0)}% of the source`);
   }
-  facts.push(node.status === "zoomed" ? "explored" : "not explored yet — click to zoom");
+  facts.push(node.status === "zoomed" ? "explored" : "not explored yet — click to open its sub-concepts");
   parts.push(facts.join(" · "));
   return parts.join("\n\n");
 }
@@ -77,9 +103,11 @@ export const MapTab: FC<MapTabProps> = ({
 }) => {
   const queryClient = useQueryClient();
   const readOnly = useReadOnly();
+  const viewportRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<GraphResponse | null>(null);
   const [svgContent, setSvgContent] = useState<string>("");
+  const panZoom = usePanZoom(viewportRef, containerRef, svgContent);
   const [renderError, setRenderError] = useState<string>("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeProgress, setAnalyzeProgress] = useState<number>(0);
@@ -151,7 +179,7 @@ export const MapTab: FC<MapTabProps> = ({
       return;
     }
 
-    const definition = buildMermaidGraph(g, MAX_RENDER_NODES);
+    const definition = buildMermaidGraph(g, MAX_RENDER_NODES, themedNodeColors());
     try {
       const id = `graph-${topicId}-${Date.now()}`;
       const { svg } = await mermaid.render(id, definition);
@@ -197,6 +225,10 @@ export const MapTab: FC<MapTabProps> = ({
     }
   }, [readOnly, topicId, queryClient, onZoomComplete]);
 
+  // Node click listeners are bound once per rendered SVG and call the latest handler
+  const handleZoomRef = useRef(handleZoom);
+  handleZoomRef.current = handleZoom;
+
   const addZoomHandlers = useCallback((g: GraphResponse) => {
     if (readOnly) return;
     // Run after paint so the SVG is already in the DOM
@@ -208,13 +240,17 @@ export const MapTab: FC<MapTabProps> = ({
         const labelEl = el.querySelector(".label, text");
         const label = labelEl?.textContent?.trim();
         const node = label ? nodeMap.get(label) : undefined;
-        if (node && node.status === "unexplored") {
-          (el as HTMLElement).style.cursor = "pointer";
-          el.addEventListener("click", () => void handleZoom(node.id, node.label));
+        const element = el as HTMLElement;
+        // This runs again whenever its inputs change while the same SVG is on screen;
+        // binding twice would send two zoom requests for one click.
+        if (node && node.status === "unexplored" && !element.dataset.zoomBound) {
+          element.dataset.zoomBound = "true";
+          element.style.cursor = "pointer";
+          element.addEventListener("click", () => void handleZoomRef.current(node.id, node.label));
         }
       });
     });
-  }, [readOnly, handleZoom]);
+  }, [readOnly]);
 
   // Add tooltips and zoom handlers after SVG renders (runs on every new svgContent)
   useEffect(() => {
@@ -399,29 +435,42 @@ export const MapTab: FC<MapTabProps> = ({
         </div>
       ) : (
         <>
-          <div
-            className={styles.graphContainer}
-            ref={containerRef}
-            dangerouslySetInnerHTML={{ __html: svgContent }}
-            onClick={onMapInteraction}
-          />
+          <div className={styles.graphContainer} ref={viewportRef} onClick={onMapInteraction}>
+            <div
+              className={styles.graphContent}
+              ref={containerRef}
+              dangerouslySetInnerHTML={{ __html: svgContent }}
+            />
+            <div className={styles.viewControls} onClick={(e) => e.stopPropagation()}>
+              <button className="btn btn-secondary" onClick={panZoom.zoomOut} title="Zoom out" aria-label="Zoom out">
+                −
+              </button>
+              <span className={styles.viewScale}>{Math.round(panZoom.scale * 100)}%</span>
+              <button className="btn btn-secondary" onClick={panZoom.zoomIn} title="Zoom in" aria-label="Zoom in">
+                +
+              </button>
+              <button className="btn btn-secondary" onClick={panZoom.fit} title="Fit the whole map" aria-label="Fit the whole map">
+                ⤢
+              </button>
+            </div>
+          </div>
+          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+            Drag to move · scroll or pinch to zoom the view
+          </div>
           <div className={styles.legend} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
             <div className={styles.legendItem}>
               <div className={styles.dot} style={{ background: "var(--accent)" }} />
-              Unexplored node (click to zoom)
+              Unexplored node (click to open its sub-concepts)
             </div>
             <div className={styles.legendItem}>
               <div className={styles.dot} style={{ background: "var(--success)" }} />
               Zoomed node
             </div>
             <div className={styles.legendItem}>
-              <span>→ Relational</span>
+              <span>— Related</span>
             </div>
             <div className={styles.legendItem}>
-              <span>⇒ Hierarchical</span>
-            </div>
-            <div className={styles.legendItem}>
-              <span>⇢ Causal</span>
+              <span>→ Hierarchical or causal</span>
             </div>
           </div>
         </>
