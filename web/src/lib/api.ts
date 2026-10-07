@@ -19,7 +19,7 @@ import {
   type Task,
   type Topic,
 } from "./types";
-import { getIdToken } from "./msal";
+import { getIdToken, markSessionExpired } from "./msal";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -50,6 +50,8 @@ async function apiFetch<T>(
   });
 
   if (!res.ok) {
+    // The server rejected the token (or there was none): send the user back to sign-in
+    if (res.status === 401) markSessionExpired();
     const text = await res.text().catch(() => res.statusText);
     throw new ApiError(res.status, text);
   }

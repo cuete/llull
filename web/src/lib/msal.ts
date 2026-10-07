@@ -52,15 +52,56 @@ export function logoutFromMicrosoft(): void {
   void msalInstance.logoutRedirect({ account });
 }
 
-/** ID token for the active account, silently refreshing if needed. Null if signed out. */
+// A remembered account whose session can no longer be renewed silently. MSAL still
+// reports such an account as signed in, so without this flag the app would render and
+// every API call would fail with 401, with no way to sign in again.
+let sessionExpired = false;
+const sessionListeners = new Set<() => void>();
+
+export function isSessionExpired(): boolean {
+  return sessionExpired;
+}
+
+export function subscribeSessionExpired(listener: () => void): () => void {
+  sessionListeners.add(listener);
+  return () => sessionListeners.delete(listener);
+}
+
+export function markSessionExpired(): void {
+  if (!msalEnabled || sessionExpired) return;
+  sessionExpired = true;
+  sessionListeners.forEach((listener) => listener());
+}
+
+function isExpired(claims: object | undefined): boolean {
+  const exp = (claims as { exp?: number } | undefined)?.exp;
+  return typeof exp === "number" && exp * 1000 <= Date.now();
+}
+
+/** ID token for the signed-in account, silently refreshing if needed. Null if signed out. */
 export async function getIdToken(): Promise<string | null> {
   if (!msalEnabled) return null;
-  const account = msalInstance.getActiveAccount();
-  if (!account) return null;
+  let account = msalInstance.getActiveAccount();
+  if (!account) {
+    // An account remembered from an earlier visit is not always the active one
+    account = msalInstance.getAllAccounts()[0] ?? null;
+    if (!account) return null;
+    msalInstance.setActiveAccount(account);
+  }
   try {
-    const result = await msalInstance.acquireTokenSilent({ scopes: LOGIN_SCOPES, account });
+    let result = await msalInstance.acquireTokenSilent({ scopes: LOGIN_SCOPES, account });
+    if (isExpired(result.idTokenClaims)) {
+      // The cache can hand back an ID token past its expiry; ask for a fresh one
+      result = await msalInstance.acquireTokenSilent({
+        scopes: LOGIN_SCOPES,
+        account,
+        forceRefresh: true,
+      });
+    }
+    if (isExpired(result.idTokenClaims)) throw new Error("ID token expired");
     return result.idToken;
   } catch {
+    markSessionExpired();
     return null;
   }
 }
