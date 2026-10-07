@@ -19,17 +19,53 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 8px;
-  overflow: auto;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 1rem;
+  /* A viewport onto the map: the content is moved and scaled inside it */
+  position: relative;
+  overflow: hidden;
   min-height: 300px;
+  cursor: grab;
+  /* Let drags and pinches move the map instead of scrolling or zooming the page */
+  touch-action: none;
+  user-select: none;
 }
 
-.graphContainer :global(svg) {
-  max-width: 100%;
-  height: auto;
+.graphContent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.graphContent :global(svg) {
+  display: block;
+}
+
+.viewControls {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: default;
+}
+
+.viewControls :global(.btn) {
+  min-width: 2rem;
+  padding: 0.2rem 0.5rem;
+  line-height: 1.2;
+}
+
+.viewScale {
+  min-width: 3rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
 }
 
 .emptyState {
